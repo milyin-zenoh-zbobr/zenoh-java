@@ -15,7 +15,6 @@
 package io.zenoh.jni
 
 import io.zenoh.ZenohLoad
-import io.zenoh.exceptions.ZError
 import io.zenoh.jni.callbacks.JNIOnCloseCallback
 import io.zenoh.jni.callbacks.JNIScoutCallback
 
@@ -31,20 +30,23 @@ public class JNIScout(private val ptr: Long) {
             ZenohLoad
         }
 
-        @Throws(ZError::class)
         fun scout(
             whatAmI: Int,
             callback: JNIScoutCallback,
             onClose: JNIOnCloseCallback,
             config: JNIConfig?,
-        ): JNIScout = JNIScout(scoutViaJNI(whatAmI, callback, onClose, config?.ptr ?: 0))
+            error: Array<String?>
+        ): JNIScout? {
+            val ptr = scoutViaJNI(whatAmI, callback, onClose, config?.ptr ?: 0, error)
+            return if (ptr == 0L) null else JNIScout(ptr)
+        }
 
-        @Throws(ZError::class)
         private external fun scoutViaJNI(
             whatAmI: Int,
             callback: JNIScoutCallback,
             onClose: JNIOnCloseCallback,
             configPtr: Long,
+            error: Array<String?>
         ): Long
 
         private external fun freePtrViaJNI(ptr: Long)

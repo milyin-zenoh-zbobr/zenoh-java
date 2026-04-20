@@ -60,7 +60,10 @@ object Zenoh {
             handler.handle(Hello(WhatAmI.fromInt(whatAmI), ZenohId(id), locators))
         }
         val binaryWhatAmI = scoutOptions.whatAmI.map { it.value }.reduce { acc, it -> acc or it }
-        return HandlerScout(JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig), handler.receiver())
+        val error = arrayOfNulls<String>(1)
+        val jniScout = JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig, error)
+            ?: throw ZError(error[0] ?: "Scout failed")
+        return HandlerScout(jniScout, handler.receiver())
     }
 
     /**
@@ -82,7 +85,10 @@ object Zenoh {
             handler.handle(Hello(WhatAmI.fromInt(whatAmI), ZenohId(id), locators))
         }
         val binaryWhatAmI = scoutOptions.whatAmI.map { it.value }.reduce { acc, it -> acc or it }
-        return HandlerScout(JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig), handler.receiver())
+        val error = arrayOfNulls<String>(1)
+        val jniScout = JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig, error)
+            ?: throw ZError(error[0] ?: "Scout failed")
+        return HandlerScout(jniScout, handler.receiver())
     }
 
     /**
@@ -103,7 +109,10 @@ object Zenoh {
             callback.run(Hello(WhatAmI.fromInt(whatAmI), ZenohId(id), locators))
         }
         val binaryWhatAmI = scoutOptions.whatAmI.map { it.value }.reduce { acc, it -> acc or it }
-        return CallbackScout(JNIScout.scout(binaryWhatAmI, scoutCallback, fun() {}, scoutOptions.config?.jniConfig))
+        val error = arrayOfNulls<String>(1)
+        val jniScout = JNIScout.scout(binaryWhatAmI, scoutCallback, fun() {}, scoutOptions.config?.jniConfig, error)
+            ?: throw ZError(error[0] ?: "Scout failed")
+        return CallbackScout(jniScout)
     }
 
     /**

@@ -79,7 +79,8 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
         @JvmStatic
         @Throws(ZError::class)
         fun tryFrom(keyExpr: String): KeyExpr {
-            return KeyExpr(JNIKeyExpr.tryFrom(keyExpr))
+            val error = arrayOfNulls<String>(1)
+            return KeyExpr(JNIKeyExpr.tryFrom(keyExpr, error) ?: throw ZError(error[0] ?: "Invalid key expression: $keyExpr"))
         }
 
         /**
@@ -95,7 +96,8 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
         @JvmStatic
         @Throws(ZError::class)
         fun autocanonize(keyExpr: String): KeyExpr {
-            return KeyExpr(JNIKeyExpr.autocanonize(keyExpr))
+            val error = arrayOfNulls<String>(1)
+            return KeyExpr(JNIKeyExpr.autocanonize(keyExpr, error) ?: throw ZError(error[0] ?: "Failed to autocanonize key expression: $keyExpr"))
         }
     }
 
@@ -106,7 +108,10 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun intersects(other: KeyExpr): Boolean {
-        return JNIKeyExpr.intersects(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr)
+        val error = arrayOfNulls<String>(1)
+        val result = JNIKeyExpr.intersects(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr, error)
+        if (result < 0) throw ZError(error[0] ?: "Failed to check intersects")
+        return result == 1
     }
 
     /**
@@ -116,7 +121,10 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun includes(other: KeyExpr): Boolean {
-        return JNIKeyExpr.includes(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr)
+        val error = arrayOfNulls<String>(1)
+        val result = JNIKeyExpr.includes(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr, error)
+        if (result < 0) throw ZError(error[0] ?: "Failed to check includes")
+        return result == 1
     }
 
     /**
@@ -126,7 +134,10 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun relationTo(other: KeyExpr): SetIntersectionLevel {
-        return SetIntersectionLevel.fromInt(JNIKeyExpr.relationTo(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr))
+        val error = arrayOfNulls<String>(1)
+        val result = JNIKeyExpr.relationTo(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr, error)
+        if (result < 0) throw ZError(error[0] ?: "Failed to get relation")
+        return SetIntersectionLevel.fromInt(result)
     }
 
     /**
@@ -135,7 +146,8 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun join(other: String): KeyExpr {
-        return KeyExpr(JNIKeyExpr.join(jniKeyExpr, keyExpr, other))
+        val error = arrayOfNulls<String>(1)
+        return KeyExpr(JNIKeyExpr.join(jniKeyExpr, keyExpr, other, error) ?: throw ZError(error[0] ?: "Failed to join key expressions"))
     }
 
     /**
@@ -144,7 +156,8 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun concat(other: String): KeyExpr {
-        return KeyExpr(JNIKeyExpr.concat(jniKeyExpr, keyExpr, other))
+        val error = arrayOfNulls<String>(1)
+        return KeyExpr(JNIKeyExpr.concat(jniKeyExpr, keyExpr, other, error) ?: throw ZError(error[0] ?: "Failed to concat key expressions"))
     }
 
     override fun toString(): String {

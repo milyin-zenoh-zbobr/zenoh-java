@@ -15,7 +15,7 @@
 use std::{ptr::null, sync::Arc};
 
 use jni::{
-    objects::{GlobalRef, JClass, JList, JObject, JValue},
+    objects::{GlobalRef, JClass, JList, JObject, JObjectArray, JValue},
     sys::jint,
     JNIEnv,
 };
@@ -24,7 +24,7 @@ use zenoh::{scouting::Scout, Config};
 
 use crate::owned_object::OwnedObject;
 use crate::utils::{get_callback_global_ref, get_java_vm, load_on_close};
-use crate::{errors::ZResult, throw_exception, zerror};
+use crate::{errors::{set_error_string, ZResult}, zerror};
 
 /// Start a scout.
 ///
@@ -32,9 +32,10 @@ use crate::{errors::ZResult, throw_exception, zerror};
 /// - `whatAmI`: Ordinal value of the WhatAmI enum.
 /// - `callback`: Callback to be executed whenever a hello message is received.
 /// - `config_ptr`: Optional config pointer.
+/// - `error_out`: A single-element String array; on failure the error message is written to index 0.
 ///
 /// Returns a pointer to the scout, which must be freed afterwards.
-/// If starting the scout fails, an exception is thrown on the JVM, and a null pointer is returned.
+/// On failure, sets `error_out[0]` to the error message and returns a null pointer.
 ///
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -45,6 +46,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIScout_00024Companion_scoutViaJNI(
     callback: JObject,
     on_close: JObject,
     config_ptr: /*nullable=*/ *const Config,
+    error_out: JObjectArray,
 ) -> *const Scout<()> {
     || -> ZResult<*const Scout<()>> {
         let callback_global_ref = get_callback_global_ref(&mut env, callback)?;
@@ -95,7 +97,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIScout_00024Companion_scoutViaJNI(
             .map_err(|err| zerror!(err))
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         null()
     })
 }

@@ -15,18 +15,17 @@
 use std::sync::Arc;
 
 use jni::{
-    objects::{JByteArray, JClass, JObject, JString},
+    objects::{JByteArray, JClass, JObject, JObjectArray, JString},
     sys::jint,
     JNIEnv,
 };
 use zenoh::{key_expr::KeyExpr, query::Querier, Wait};
 
 use crate::{
-    errors::ZResult,
+    errors::{set_error_string, ZResult},
     key_expr::process_kotlin_key_expr,
     owned_object::OwnedObject,
     session::{on_reply_error, on_reply_success},
-    throw_exception,
     utils::{
         decode_byte_array, decode_encoding, decode_string, get_callback_global_ref, get_java_vm,
         load_on_close,
@@ -34,26 +33,6 @@ use crate::{
     zerror,
 };
 
-/// Perform a Zenoh GET through a querier.
-///
-/// This function is meant to be called from Java/Kotlin code through JNI.
-///
-/// Parameters:
-/// - `env`: The JNI environment.
-/// - `_class`: The JNI class.
-/// - `querier_ptr`: The raw pointer to the querier.
-/// - `key_expr_ptr`: A raw pointer to the [KeyExpr] provided to the kotlin querier. May be null in case of using an
-///   undeclared key expression.
-/// - `key_expr_str`: String representation of the key expression used during the querier declaration.
-///   It won't be considered in case a key_expr_ptr to a declared key expression is provided.
-/// - `selector_params`: Optional selector parameters for the query.
-/// - `callback`: Reference to the Kotlin callback to be run upon receiving a reply.
-/// - `on_close`: Reference to a kotlin callback to be run upon finishing the get operation, mostly used for closing a provided channel.
-/// - `attachment`: Optional attachment.
-/// - `payload`: Optional payload for the query.
-/// - `encoding_id`: Encoding id of the payload provided.
-/// - `encoding_schema`: Encoding schema of the payload provided.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIQuerier_getViaJNI(
@@ -69,9 +48,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIQuerier_getViaJNI(
     payload: /*nullable*/ JByteArray,
     encoding_id: jint,
     encoding_schema: /*nullable*/ JString,
-) {
+    error_out: JObjectArray,
+) -> jint {
     let querier = OwnedObject::from_raw(querier_ptr);
-    let _ = || -> ZResult<()> {
+    || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         let java_vm = Arc::new(get_java_vm(&mut env)?);
         let callback_global_ref = get_callback_global_ref(&mut env, callback)?;
@@ -118,14 +98,15 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIQuerier_getViaJNI(
             .map(|_| tracing::trace!("Performing get on '{key_expr}'.",))
             .map_err(|err| zerror!(err))
     }()
-    .map_err(|err| throw_exception!(env, err));
+    .map_or_else(
+        |err| {
+            set_error_string(&mut env, &error_out, &err.to_string());
+            -1
+        },
+        |_| 0,
+    )
 }
 
-///
-/// Frees the pointer of the querier.
-///
-/// After a call to this function, no further jni operations should be performed using the querier associated to the raw pointer provided.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuerier_freePtrViaJNI(

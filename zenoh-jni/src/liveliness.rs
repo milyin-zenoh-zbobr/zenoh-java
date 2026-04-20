@@ -15,8 +15,8 @@
 use std::{ptr::null, sync::Arc, time::Duration};
 
 use jni::{
-    objects::{JClass, JObject, JString},
-    sys::{jboolean, jlong},
+    objects::{JClass, JObject, JObjectArray, JString},
+    sys::{jboolean, jint, jlong},
     JNIEnv,
 };
 
@@ -26,12 +26,11 @@ use zenoh::{
 };
 
 use crate::{
-    errors::ZResult,
+    errors::{set_error_string, ZResult},
     key_expr::process_kotlin_key_expr,
     owned_object::OwnedObject,
     sample_callback::SetJniSampleCallback,
     session::{on_reply_error, on_reply_success},
-    throw_exception,
     utils::{get_callback_global_ref, get_java_vm, load_on_close},
     zerror,
 };
@@ -47,9 +46,10 @@ pub extern "C" fn Java_io_zenoh_jni_JNISession_livelinessGetViaJNI(
     callback: JObject,
     timeout_ms: jlong,
     on_close: JObject,
-) {
+    error_out: JObjectArray,
+) -> jint {
     let session = unsafe { OwnedObject::from_raw(session_ptr) };
-    let _ = || -> ZResult<()> {
+    || -> ZResult<()> {
         let key_expr = unsafe { process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr) }?;
         let java_vm = Arc::new(get_java_vm(&mut env)?);
         let callback_global_ref = get_callback_global_ref(&mut env, callback)?;
@@ -94,9 +94,13 @@ pub extern "C" fn Java_io_zenoh_jni_JNISession_livelinessGetViaJNI(
         });
         Ok(())
     }()
-    .map_err(|err| {
-        throw_exception!(env, err);
-    });
+    .map_or_else(
+        |err| {
+            set_error_string(&mut env, &error_out, &err.to_string());
+            -1
+        },
+        |_| 0,
+    )
 }
 
 #[no_mangle]
@@ -107,6 +111,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessTokenViaJNI(
     session_ptr: *const Session,
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
+    error_out: JObjectArray,
 ) -> *const LivelinessToken {
     let session = unsafe { OwnedObject::from_raw(session_ptr) };
     || -> ZResult<*const LivelinessToken> {
@@ -120,7 +125,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessTokenViaJNI(
         Ok(Arc::into_raw(Arc::new(token)))
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         null()
     })
 }
@@ -146,6 +151,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessSubscribe
     callback: JObject,
     history: jboolean,
     on_close: JObject,
+    error_out: JObjectArray,
 ) -> *const Subscriber<()> {
     let session = OwnedObject::from_raw(session_ptr);
     || -> ZResult<*const Subscriber<()>> {
@@ -164,7 +170,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessSubscribe
         Ok(Arc::into_raw(Arc::new(subscriber)))
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         null()
     })
 }

@@ -14,7 +14,6 @@
 
 package io.zenoh.jni
 
-import io.zenoh.exceptions.ZError
 import io.zenoh.jni.callbacks.JNIOnCloseCallback
 import io.zenoh.jni.callbacks.JNISampleMissListenerCallback
 import io.zenoh.jni.callbacks.JNISubscriberCallback
@@ -26,55 +25,57 @@ import io.zenoh.jni.callbacks.JNISubscriberCallback
  */
 public class JNIAdvancedSubscriber(private val ptr: Long) {
 
-    @Throws(ZError::class)
     fun declareDetectPublishersSubscriber(
         history: Boolean,
         callback: JNISubscriberCallback,
         onClose: JNIOnCloseCallback,
-    ): JNISubscriber = JNISubscriber(declareDetectPublishersSubscriberViaJNI(ptr, history, callback, onClose))
+        error: Array<String?>
+    ): JNISubscriber? {
+        val subscriberPtr = declareDetectPublishersSubscriberViaJNI(ptr, history, callback, onClose, error)
+        return if (subscriberPtr == 0L) null else JNISubscriber(subscriberPtr)
+    }
 
-    @Throws(ZError::class)
     fun declareBackgroundDetectPublishersSubscriber(
         history: Boolean,
         callback: JNISubscriberCallback,
         onClose: JNIOnCloseCallback,
-    ) = declareBackgroundDetectPublishersSubscriberViaJNI(ptr, history, callback, onClose)
+        error: Array<String?>
+    ): Int = declareBackgroundDetectPublishersSubscriberViaJNI(ptr, history, callback, onClose, error)
 
-    @Throws(ZError::class)
     fun declareSampleMissListener(
         callback: JNISampleMissListenerCallback,
         onClose: JNIOnCloseCallback,
-    ): JNISampleMissListener = JNISampleMissListener(declareSampleMissListenerViaJNI(ptr, callback, onClose))
+        error: Array<String?>
+    ): JNISampleMissListener? {
+        val listenerPtr = declareSampleMissListenerViaJNI(ptr, callback, onClose, error)
+        return if (listenerPtr == 0L) null else JNISampleMissListener(listenerPtr)
+    }
 
-    @Throws(ZError::class)
     fun declareBackgroundSampleMissListener(
         callback: JNISampleMissListenerCallback,
         onClose: JNIOnCloseCallback,
-    ) = declareBackgroundSampleMissListenerViaJNI(ptr, callback, onClose)
+        error: Array<String?>
+    ): Int = declareBackgroundSampleMissListenerViaJNI(ptr, callback, onClose, error)
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
-    @Throws(ZError::class)
     private external fun declareDetectPublishersSubscriberViaJNI(
-        ptr: Long, history: Boolean, callback: JNISubscriberCallback, onClose: JNIOnCloseCallback
+        ptr: Long, history: Boolean, callback: JNISubscriberCallback, onClose: JNIOnCloseCallback, error: Array<String?>
     ): Long
 
-    @Throws(ZError::class)
     private external fun declareBackgroundDetectPublishersSubscriberViaJNI(
-        ptr: Long, history: Boolean, callback: JNISubscriberCallback, onClose: JNIOnCloseCallback
-    )
+        ptr: Long, history: Boolean, callback: JNISubscriberCallback, onClose: JNIOnCloseCallback, error: Array<String?>
+    ): Int
 
-    @Throws(ZError::class)
     private external fun declareSampleMissListenerViaJNI(
-        ptr: Long, callback: JNISampleMissListenerCallback, onClose: JNIOnCloseCallback
+        ptr: Long, callback: JNISampleMissListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>
     ): Long
 
-    @Throws(ZError::class)
     private external fun declareBackgroundSampleMissListenerViaJNI(
-        ptr: Long, callback: JNISampleMissListenerCallback, onClose: JNIOnCloseCallback
-    )
+        ptr: Long, callback: JNISampleMissListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>
+    ): Int
 
     private external fun freePtrViaJNI(ptr: Long)
 }

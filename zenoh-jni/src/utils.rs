@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use crate::{errors::ZResult, throw_exception, zerror};
+use crate::{errors::ZResult, zerror};
 use jni::{
     objects::{JByteArray, JObject, JString},
     sys::jint,
@@ -178,10 +178,7 @@ pub(crate) fn load_on_close(
                 Ok(_) => (),
                 Err(err) => {
                     _ = env.exception_describe();
-                    throw_exception!(
-                        env,
-                        zerror!("Error while running 'onClose' callback: {}", err)
-                    );
+                    tracing::error!("Error while running 'onClose' callback: {}", err);
                 }
             }
         }

@@ -15,43 +15,34 @@
 use std::{ptr::null, sync::Arc};
 
 use jni::{
-    objects::{JClass, JString},
-    sys::jstring,
+    objects::{JClass, JObjectArray, JString},
+    sys::{jint, jstring},
     JNIEnv,
 };
 use zenoh::Config;
 
+use crate::errors::{set_error_string, ZResult};
 use crate::owned_object::OwnedObject;
-use crate::{errors::ZResult, zerror};
-use crate::{throw_exception, utils::decode_string};
+use crate::{utils::decode_string, zerror};
 
-/// Loads the default configuration, returning a raw pointer to it.
-///
-/// The pointer to the config is expected to be freed later on upon the destruction of the
-/// Kotlin Config instance.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_loadDefaultConfigViaJNI(
     _env: JNIEnv,
     _class: JClass,
+    _error_out: JObjectArray,
 ) -> *const Config {
     let config = Config::default();
     Arc::into_raw(Arc::new(config))
 }
 
-/// Loads the config from a file, returning a pointer to the loaded config in case of success.
-/// In case of failure, an exception is thrown via JNI.
-///
-/// The pointer to the config is expected to be freed later on upon the destruction of the
-/// Kotlin Config instance.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_loadConfigFileViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     config_path: JString,
+    error_out: JObjectArray,
 ) -> *const Config {
     || -> ZResult<*const Config> {
         let config_file_path = decode_string(&mut env, &config_path)?;
@@ -59,23 +50,18 @@ pub extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_loadConfigFileViaJN
         Ok(Arc::into_raw(Arc::new(config)))
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         null()
     })
 }
 
-/// Loads the config from a json/json5 formatted string, returning a pointer to the loaded config
-/// in case of success. In case of failure, an exception is thrown via JNI.
-///
-/// The pointer to the config is expected to be freed later on upon the destruction of the
-/// Kotlin Config instance.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_loadJsonConfigViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     json_config: JString,
+    error_out: JObjectArray,
 ) -> *const Config {
     || -> ZResult<*const Config> {
         let json_config = decode_string(&mut env, &json_config)?;
@@ -88,23 +74,18 @@ pub extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_loadJsonConfigViaJN
         Ok(Arc::into_raw(Arc::new(config)))
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         null()
     })
 }
 
-/// Loads the config from a yaml-formatted string, returning a pointer to the loaded config
-/// in case of success. In case of failure, an exception is thrown via JNI.
-///
-/// The pointer to the config is expected to be freed later on upon the destruction of the
-/// Kotlin Config instance.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_loadYamlConfigViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     yaml_config: JString,
+    error_out: JObjectArray,
 ) -> *const Config {
     || -> ZResult<*const Config> {
         let yaml_config = decode_string(&mut env, &yaml_config)?;
@@ -116,13 +97,11 @@ pub extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_loadYamlConfigViaJN
         Ok(Arc::into_raw(Arc::new(config)))
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         null()
     })
 }
 
-/// Returns the json value associated to the provided [key]. May throw an exception in case of failure, which must be handled
-/// on the kotlin layer.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_getJsonViaJNI(
@@ -130,6 +109,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_getJsonViaJN
     _class: JClass,
     cfg_ptr: *const Config,
     key: JString,
+    error_out: JObjectArray,
 ) -> jstring {
     let arc_cfg = OwnedObject::from_raw(cfg_ptr);
     || -> ZResult<jstring> {
@@ -139,13 +119,11 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_getJsonViaJN
         Ok(java_json.as_raw())
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         JString::default().as_raw()
     })
 }
 
-/// Inserts a json5 value associated to the provided [key]. May throw an exception in case of failure, which must be handled
-/// on the kotlin layer.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_insertJson5ViaJNI(
@@ -154,7 +132,8 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_insertJson5V
     cfg_ptr: *const Config,
     key: JString,
     value: JString,
-) {
+    error_out: JObjectArray,
+) -> jint {
     || -> ZResult<()> {
         let key = decode_string(&mut env, &key)?;
         let value = decode_string(&mut env, &value)?;
@@ -165,14 +144,15 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_insertJson5V
         core::ptr::write(cfg_ptr as *mut _, config);
         insert_result
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-    })
+    .map_or_else(
+        |err| {
+            set_error_string(&mut env, &error_out, &err.to_string());
+            -1
+        },
+        |_| 0,
+    )
 }
 
-/// Frees the pointer to the config. The pointer should be valid and should have been obtained through
-/// one of the preceding `load` functions. This function should be called upon destruction of the kotlin
-/// Config instance.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIConfig_00024Companion_freePtrViaJNI(

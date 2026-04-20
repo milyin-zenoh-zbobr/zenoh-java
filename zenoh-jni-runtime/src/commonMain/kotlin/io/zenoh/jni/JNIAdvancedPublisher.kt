@@ -14,7 +14,6 @@
 
 package io.zenoh.jni
 
-import io.zenoh.exceptions.ZError
 import io.zenoh.jni.callbacks.JNIMatchingListenerCallback
 import io.zenoh.jni.callbacks.JNIOnCloseCallback
 
@@ -25,51 +24,41 @@ import io.zenoh.jni.callbacks.JNIOnCloseCallback
  */
 public class JNIAdvancedPublisher(private val ptr: Long) {
 
-    @Throws(ZError::class)
-    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?) {
-        putViaJNI(ptr, payload, encodingId, encodingSchema, attachment)
+    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?, error: Array<String?>): Int =
+        putViaJNI(ptr, payload, encodingId, encodingSchema, attachment, error)
+
+    fun delete(attachment: ByteArray?, error: Array<String?>): Int = deleteViaJNI(ptr, attachment, error)
+
+    fun declareMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>): JNIMatchingListener? {
+        val listenerPtr = declareMatchingListenerViaJNI(ptr, callback, onClose, error)
+        return if (listenerPtr == 0L) null else JNIMatchingListener(listenerPtr)
     }
 
-    @Throws(ZError::class)
-    fun delete(attachment: ByteArray?) {
-        deleteViaJNI(ptr, attachment)
-    }
+    fun declareBackgroundMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>): Int =
+        declareBackgroundMatchingListenerViaJNI(ptr, callback, onClose, error)
 
-    @Throws(ZError::class)
-    fun declareMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback): JNIMatchingListener =
-        JNIMatchingListener(declareMatchingListenerViaJNI(ptr, callback, onClose))
-
-    @Throws(ZError::class)
-    fun declareBackgroundMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback) =
-        declareBackgroundMatchingListenerViaJNI(ptr, callback, onClose)
-
-    @Throws(ZError::class)
-    fun getMatchingStatus(): Boolean = getMatchingStatusViaJNI(ptr)
+    /** Returns 1 (true), 0 (false), or -1 (error). */
+    fun getMatchingStatus(error: Array<String?>): Int = getMatchingStatusViaJNI(ptr, error)
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
-    @Throws(ZError::class)
     private external fun putViaJNI(
-        ptr: Long, payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?
-    )
+        ptr: Long, payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?, error: Array<String?>
+    ): Int
 
-    @Throws(ZError::class)
-    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?)
+    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?, error: Array<String?>): Int
 
-    @Throws(ZError::class)
     private external fun declareMatchingListenerViaJNI(
-        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback
+        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>
     ): Long
 
-    @Throws(ZError::class)
     private external fun declareBackgroundMatchingListenerViaJNI(
-        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback
-    )
+        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>
+    ): Int
 
-    @Throws(ZError::class)
-    private external fun getMatchingStatusViaJNI(ptr: Long): Boolean
+    private external fun getMatchingStatusViaJNI(ptr: Long, error: Array<String?>): Int
 
     private external fun freePtrViaJNI(ptr: Long)
 }

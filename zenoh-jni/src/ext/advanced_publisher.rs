@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use jni::objects::JValue;
 use jni::{
-    objects::{JByteArray, JClass, JString},
+    objects::{JByteArray, JClass, JObjectArray, JString},
     sys::jint,
     JNIEnv,
 };
@@ -27,13 +27,12 @@ use zenoh_ext::AdvancedPublisher;
 use crate::owned_object::OwnedObject;
 use crate::utils::{get_callback_global_ref, get_java_vm, load_on_close};
 
-use crate::throw_exception;
+use crate::errors::set_error_string;
 use crate::{
     errors::ZResult,
     utils::{decode_byte_array, decode_encoding},
     zerror,
 };
-use jni::sys::jboolean;
 use std::ptr::null;
 
 use jni::objects::JObject;
@@ -94,9 +93,10 @@ impl<'a> SetJniMatchingStatusCallback for MatchingListenerBuilder<'a, DefaultHan
 /// - `advanced_publisher_ptr`: The raw pointer to an [AdvancedPublisher].
 /// - `callback`: The callback function as an instance of the `JNIMatchingListenerCallback` interface in Java/Kotlin.
 /// - `on_close`: A Java/Kotlin `JNIOnCloseCallback` function interface to be called upon undeclaring the [MatchingListener].
+/// - `error_out`: A single-element String array; on failure the error message is written to index 0.
 ///
 /// Returns:
-/// - A raw pointer to the declared [MatchingListener]. In case of failure, an exception is thrown and null is returned.
+/// - A raw pointer to the declared [MatchingListener]. On failure, sets `error_out[0]` and returns null.
 ///
 /// Safety:
 /// - The function is marked as unsafe due to raw pointer manipulation and JNI interaction.
@@ -105,7 +105,6 @@ impl<'a> SetJniMatchingStatusCallback for MatchingListenerBuilder<'a, DefaultHan
 ///   allowing safe usage of the [AdvancedPublisher] after this function call.
 /// - The callback function passed as `callback` must be a valid instance of the `JNIMatchingListenerCallback` interface
 ///   in Java/Kotlin, matching the specified signature.
-/// - The function may throw a JNI exception in case of failure, which should be handled by the caller.
 ///
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
@@ -117,6 +116,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_declareMatchingL
 
     callback: JObject,
     on_close: JObject,
+    error_out: JObjectArray,
 ) -> *const MatchingListener<()> {
     let advanced_publisher = OwnedObject::from_raw(advanced_publisher_ptr);
 
@@ -139,7 +139,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_declareMatchingL
         Ok(Arc::into_raw(Arc::new(matching_listener)))
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         null()
     })
 }
@@ -153,6 +153,9 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_declareMatchingL
 /// - `advanced_publisher_ptr`: The raw pointer to an [AdvancedPublisher].
 /// - `callback`: The callback function as an instance of the `JNIMatchingListenerCallback` interface in Java/Kotlin.
 /// - `on_close`: A Java/Kotlin `JNIOnCloseCallback` function interface to be called upon undeclaring the [AdvancedPublisher].
+/// - `error_out`: A single-element String array; on failure the error message is written to index 0.
+///
+/// Returns -1 on failure (with `error_out[0]` set), 0 on success.
 ///
 /// Safety:
 /// - The function is marked as unsafe due to raw pointer manipulation and JNI interaction.
@@ -161,7 +164,6 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_declareMatchingL
 ///   allowing safe usage of the [AdvancedPublisher] after this function call.
 /// - The callback function passed as `callback` must be a valid instance of the `JNIMatchingListenerCallback` interface
 ///   in Java/Kotlin, matching the specified signature.
-/// - The function may throw a JNI exception in case of failure, which should be handled by the caller.
 ///
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
@@ -173,7 +175,8 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_declareBackgroun
 
     callback: JObject,
     on_close: JObject,
-) {
+    error_out: JObjectArray,
+) -> jint {
     let advanced_publisher = OwnedObject::from_raw(advanced_publisher_ptr);
 
     || -> ZResult<()> {
@@ -195,9 +198,11 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_declareBackgroun
         );
         Ok(())
     }()
+    .map(|_| 0)
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-    });
+        set_error_string(&mut env, &error_out, &err.to_string());
+        -1
+    })
 }
 
 /// Return the matching status of the [AdvancedPublisher].
@@ -206,16 +211,16 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_declareBackgroun
 /// - `env`: The JNI environment.
 /// - `_class`: The JNI class.
 /// - `advanced_publisher_ptr`: The raw pointer to an [AdvancedPublisher].
+/// - `error_out`: A single-element String array; on failure the error message is written to index 0.
 ///
 /// Returns:
-/// - will return true if there exist Subscribers matching the Publisher's key expression and false otherwise.
+/// - 1 if there exist Subscribers matching the Publisher's key expression, 0 if not, -1 on error.
 ///
 /// Safety:
 /// - The function is marked as unsafe due to raw pointer manipulation and JNI interaction.
 /// - It assumes that the provided [AdvancedPublisher] pointer is valid and has not been modified or freed.
 /// - The [AdvancedPublisher] pointer remains valid and the ownership of the [AdvancedPublisher] is not transferred,
 ///   allowing safe usage of the [AdvancedPublisher] after this function call.
-/// - The function may throw a JNI exception in case of failure, which should be handled by the caller.
 ///
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
@@ -224,18 +229,17 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_getMatchingStatu
     mut env: JNIEnv,
     _class: JClass,
     advanced_publisher_ptr: *const AdvancedPublisher,
-) -> jboolean {
-    use crate::errors::ZError;
-
+    error_out: JObjectArray,
+) -> jint {
     let advanced_publisher = OwnedObject::from_raw(advanced_publisher_ptr);
     advanced_publisher
         .matching_status()
         .wait()
-        .map(|val| val.matching() as jboolean)
+        .map(|val| val.matching() as jint)
         .map_err(|e| zerror!(e.to_string()))
-        .unwrap_or_else(|err: ZError| {
-            throw_exception!(env, err);
-            false as jboolean
+        .unwrap_or_else(|err| {
+            set_error_string(&mut env, &error_out, &err.to_string());
+            -1
         })
 }
 
@@ -249,12 +253,14 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_getMatchingStatu
 /// - `encoding_schema`: Nullable encoding schema string of the payload.
 /// - `attachment`: Nullble byte array for the attachment.
 /// - `publisher_ptr`: The raw pointer to the [AdvancedPublisher].
+/// - `error_out`: A single-element String array; on failure the error message is written to index 0.
+///
+/// Returns 0 on success, -1 on failure.
 ///
 /// # Safety
 /// - This function is marked as unsafe due to raw pointer manipulation and JNI interaction.
 /// - Assumes that the provided [AdvancedPublisher] pointer is valid and has not been modified or freed.
 /// - The [AdvancedPublisher] pointer remains valid after this function call.
-/// - May throw an exception in case of failure, which must be handled by the caller.
 ///
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -266,9 +272,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_putViaJNI(
     encoding_id: jint,
     encoding_schema: /*nullable*/ JString,
     attachment: /*nullable*/ JByteArray,
-) {
+    error_out: JObjectArray,
+) -> jint {
     let publisher = OwnedObject::from_raw(publisher_ptr);
-    let _ = || -> ZResult<()> {
+    || -> ZResult<()> {
         let payload = decode_byte_array(&env, payload)?;
         let mut publication = publisher.put(payload);
         let encoding = decode_encoding(&mut env, encoding_id, &encoding_schema)?;
@@ -279,7 +286,11 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_putViaJNI(
         };
         publication.wait().map_err(|err| zerror!(err))
     }()
-    .map_err(|err| throw_exception!(env, err));
+    .map(|_| 0)
+    .unwrap_or_else(|err| {
+        set_error_string(&mut env, &error_out, &err.to_string());
+        -1
+    })
 }
 
 /// Performs a DELETE operation on an [AdvancedPublisher] via JNI.
@@ -289,12 +300,14 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_putViaJNI(
 /// - `_class`: The Java class reference (unused).
 /// - `attachment`: Nullble byte array for the attachment.
 /// - `publisher_ptr`: The raw pointer to the [AdvancedPublisher].
+/// - `error_out`: A single-element String array; on failure the error message is written to index 0.
+///
+/// Returns 0 on success, -1 on failure.
 ///
 /// # Safety
 /// - This function is marked as unsafe due to raw pointer manipulation and JNI interaction.
 /// - Assumes that the provided [AdvancedPublisher] pointer is valid and has not been modified or freed.
 /// - The [AdvancedPublisher] pointer remains valid after this function call.
-/// - May throw an exception in case of failure, which must be handled by the caller.
 ///
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -303,9 +316,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_deleteViaJNI(
     _class: JClass,
     publisher_ptr: *const AdvancedPublisher<'static>,
     attachment: /*nullable*/ JByteArray,
-) {
+    error_out: JObjectArray,
+) -> jint {
     let publisher = OwnedObject::from_raw(publisher_ptr);
-    let _ = || -> ZResult<()> {
+    || -> ZResult<()> {
         let mut delete = publisher.delete();
         if !attachment.is_null() {
             let attachment = decode_byte_array(&env, attachment)?;
@@ -313,7 +327,11 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedPublisher_deleteViaJNI(
         };
         delete.wait().map_err(|err| zerror!(err))
     }()
-    .map_err(|err| throw_exception!(env, err));
+    .map(|_| 0)
+    .unwrap_or_else(|err| {
+        set_error_string(&mut env, &error_out, &err.to_string());
+        -1
+    })
 }
 
 /// Frees the [AdvancedPublisher].

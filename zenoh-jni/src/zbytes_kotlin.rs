@@ -23,7 +23,7 @@
 //! different receiver type — JNI cannot overload on parameter type alone).
 
 use jni::{
-    objects::{JByteArray, JClass, JList, JMap, JObject, JString, JValue},
+    objects::{JByteArray, JClass, JList, JMap, JObject, JObjectArray, JString, JValue},
     sys::jobject,
     JNIEnv,
 };
@@ -31,8 +31,7 @@ use zenoh::bytes::ZBytes;
 use zenoh_ext::{VarInt, ZDeserializeError, ZDeserializer, ZSerializer};
 
 use crate::{
-    errors::ZResult,
-    throw_exception,
+    errors::{set_error_string, ZResult},
     utils::{bytes_to_java_array, decode_byte_array},
     zerror,
 };
@@ -175,6 +174,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_serializeViaJNI(
     _class: JClass,
     any: JObject,
     ktype: JObject,
+    error_out: JObjectArray,
 ) -> jobject {
     || -> ZResult<jobject> {
         let kotlin_type = decode_ktype(&mut env, ktype)?;
@@ -185,7 +185,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_serializeViaJNI(
         Ok(byte_array.as_raw())
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         JObject::default().as_raw()
     })
 }
@@ -365,6 +365,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_deserializeViaJNI(
     _class: JClass,
     bytes: JByteArray,
     ktype: JObject,
+    error_out: JObjectArray,
 ) -> jobject {
     || -> ZResult<jobject> {
         let raw = decode_byte_array(&env, bytes)?;
@@ -378,7 +379,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_deserializeViaJNI(
         Ok(obj)
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         JObject::default().as_raw()
     })
 }

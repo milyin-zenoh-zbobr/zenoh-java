@@ -66,20 +66,22 @@ class Query internal constructor(
         val encoding = options.encoding
         val timestamp = options.timeStamp
         val timestampEnabled = timestamp != null
-        jniQuery?.apply {
-            replySuccess(
-                keyExpr.jniKeyExpr,
-                keyExpr.keyExpr,
-                zbytes.bytes,
-                encoding?.id ?: Encoding.defaultEncoding().id,
-                encoding?.schema,
-                timestampEnabled,
-                if (timestampEnabled) timestamp!!.ntpValue() else 0,
-                options.attachment?.into()?.bytes,
-                QoS(options.congestionControl, options.priority, options.express).express
-            )
-            jniQuery = null
-        } ?: throw (ZError("Query is invalid"))
+        val jni = jniQuery ?: throw ZError("Query is invalid")
+        val error = arrayOfNulls<String>(1)
+        val result = jni.replySuccess(
+            keyExpr.jniKeyExpr,
+            keyExpr.keyExpr,
+            zbytes.bytes,
+            encoding?.id ?: Encoding.defaultEncoding().id,
+            encoding?.schema,
+            timestampEnabled,
+            if (timestampEnabled) timestamp!!.ntpValue() else 0,
+            options.attachment?.into()?.bytes,
+            QoS(options.congestionControl, options.priority, options.express).express,
+            error
+        )
+        jniQuery = null
+        if (result < 0) throw ZError(error[0] ?: "Reply failed")
     }
 
     /**
@@ -106,17 +108,19 @@ class Query internal constructor(
     fun replyDel(keyExpr: KeyExpr, options: ReplyDelOptions = ReplyDelOptions()) {
         val timestamp = options.timeStamp
         val timestampEnabled = timestamp != null
-        jniQuery?.apply {
-            replyDelete(
-                keyExpr.jniKeyExpr,
-                keyExpr.keyExpr,
-                timestampEnabled,
-                if (timestampEnabled) timestamp!!.ntpValue() else 0,
-                options.attachment?.into()?.bytes,
-                QoS(options.congestionControl, options.priority, options.express).express
-            )
-            jniQuery = null
-        } ?: throw (ZError("Query is invalid"))
+        val jni = jniQuery ?: throw ZError("Query is invalid")
+        val error = arrayOfNulls<String>(1)
+        val result = jni.replyDelete(
+            keyExpr.jniKeyExpr,
+            keyExpr.keyExpr,
+            timestampEnabled,
+            if (timestampEnabled) timestamp!!.ntpValue() else 0,
+            options.attachment?.into()?.bytes,
+            QoS(options.congestionControl, options.priority, options.express).express,
+            error
+        )
+        jniQuery = null
+        if (result < 0) throw ZError(error[0] ?: "Reply delete failed")
     }
 
     /**
@@ -129,10 +133,11 @@ class Query internal constructor(
     @Throws(ZError::class)
     fun replyErr(message: IntoZBytes, options: ReplyErrOptions = ReplyErrOptions()) {
         val encoding = options.encoding
-        jniQuery?.apply {
-            replyError(message.into().bytes, encoding?.id ?: Encoding.defaultEncoding().id, encoding?.schema)
-            jniQuery = null
-        } ?: throw (ZError("Query is invalid"))
+        val jni = jniQuery ?: throw ZError("Query is invalid")
+        val error = arrayOfNulls<String>(1)
+        val result = jni.replyError(message.into().bytes, encoding?.id ?: Encoding.defaultEncoding().id, encoding?.schema, error)
+        jniQuery = null
+        if (result < 0) throw ZError(error[0] ?: "Reply error failed")
     }
 
     /**

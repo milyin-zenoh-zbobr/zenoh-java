@@ -14,16 +14,7 @@
 
 use std::fmt;
 
-use jni::JNIEnv;
-
-#[macro_export]
-macro_rules! throw_exception {
-    ($env:expr, $err:expr) => {{
-        let _ = $err.throw_on_jvm(&mut $env).map_err(|err| {
-            tracing::error!("Unable to throw exception: {}", err);
-        });
-    }};
-}
+use jni::{objects::JObjectArray, JNIEnv};
 
 #[macro_export]
 macro_rules! zerror {
@@ -46,14 +37,15 @@ impl fmt::Display for ZError {
     }
 }
 
-impl ZError {
-    const KOTLIN_EXCEPTION_NAME: &'static str = "io/zenoh/exceptions/ZError";
-
-    pub fn throw_on_jvm(&self, env: &mut JNIEnv) -> ZResult<()> {
-        let exception_class = env
-            .find_class(Self::KOTLIN_EXCEPTION_NAME)
-            .map_err(|err| zerror!("Failed to retrieve exception class: {}", err))?;
-        env.throw_new(exception_class, self.to_string())
-            .map_err(|err| zerror!("Failed to throw exception: {}", err))
+pub(crate) fn set_error_string(env: &mut JNIEnv, error_out: &JObjectArray, msg: &str) {
+    match env.new_string(msg) {
+        Ok(jstr) => {
+            if let Err(err) = env.set_object_array_element(error_out, 0, jstr) {
+                tracing::error!("Failed to set error string in error_out array: {}", err);
+            }
+        }
+        Err(err) => {
+            tracing::error!("Failed to create JString for error message: {}", err);
+        }
     }
 }

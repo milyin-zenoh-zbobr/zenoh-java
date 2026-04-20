@@ -37,13 +37,13 @@ object JNIZBytesKotlin {
         ZenohLoad
     }
 
-    fun serialize(any: Any, kType: KType): ByteArray = serializeViaJNI(any, kType)
+    fun serialize(any: Any, kType: KType, error: Array<String?>): Any? = serializeViaJNI(any, kType, error)
 
-    fun deserialize(bytes: ByteArray, kType: KType): Any = deserializeViaJNI(bytes, kType)
-
-    @JvmStatic
-    private external fun serializeViaJNI(any: Any, kType: KType): ByteArray
+    fun deserialize(bytes: ByteArray, kType: KType, error: Array<String?>): Any? = deserializeViaJNI(bytes, kType, error)
 
     @JvmStatic
-    private external fun deserializeViaJNI(bytes: ByteArray, kType: KType): Any
+    private external fun serializeViaJNI(any: Any, kType: KType, error: Array<String?>): Any?
+
+    @JvmStatic
+    private external fun deserializeViaJNI(bytes: ByteArray, kType: KType, error: Array<String?>): Any?
 }
