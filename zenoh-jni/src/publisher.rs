@@ -15,37 +15,19 @@
 use std::sync::Arc;
 
 use jni::{
-    objects::{JByteArray, JClass, JString},
+    objects::{JByteArray, JClass, JObjectArray, JString},
     sys::jint,
     JNIEnv,
 };
 use zenoh::{pubsub::Publisher, Wait};
 
+use crate::errors::{set_error_string, ZResult};
 use crate::owned_object::OwnedObject;
-use crate::throw_exception;
 use crate::{
-    errors::ZResult,
     utils::{decode_byte_array, decode_encoding},
     zerror,
 };
 
-/// Performs a PUT operation on a Zenoh publisher via JNI.
-///
-/// # Parameters
-/// - `env`: The JNI environment pointer.
-/// - `_class`: The Java class reference (unused).
-/// - `payload`: The byte array to be published.
-/// - `encoding_id`: The encoding ID of the payload.
-/// - `encoding_schema`: Nullable encoding schema string of the payload.
-/// - `attachment`: Nullble byte array for the attachment.
-/// - `publisher_ptr`: The raw pointer to the Zenoh publisher ([Publisher]).
-///
-/// # Safety
-/// - This function is marked as unsafe due to raw pointer manipulation and JNI interaction.
-/// - Assumes that the provided publisher pointer is valid and has not been modified or freed.
-/// - The publisher pointer remains valid after this function call.
-/// - May throw an exception in case of failure, which must be handled by the caller.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIPublisher_putViaJNI(
@@ -56,9 +38,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIPublisher_putViaJNI(
     encoding_id: jint,
     encoding_schema: /*nullable*/ JString,
     attachment: /*nullable*/ JByteArray,
-) {
+    error_out: JObjectArray,
+) -> jint {
     let publisher = OwnedObject::from_raw(publisher_ptr);
-    let _ = || -> ZResult<()> {
+    || -> ZResult<()> {
         let payload = decode_byte_array(&env, payload)?;
         let mut publication = publisher.put(payload);
         let encoding = decode_encoding(&mut env, encoding_id, &encoding_schema)?;
@@ -69,23 +52,15 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIPublisher_putViaJNI(
         };
         publication.wait().map_err(|err| zerror!(err))
     }()
-    .map_err(|err| throw_exception!(env, err));
+    .map_or_else(
+        |err| {
+            set_error_string(&mut env, &error_out, &err.to_string());
+            -1
+        },
+        |_| 0,
+    )
 }
 
-/// Performs a DELETE operation on a Zenoh publisher via JNI.
-///
-/// # Parameters
-/// - `env`: The JNI environment pointer.
-/// - `_class`: The Java class reference (unused).
-/// - `attachment`: Nullble byte array for the attachment.
-/// - `publisher_ptr`: The raw pointer to the Zenoh publisher ([Publisher]).
-///
-/// # Safety
-/// - This function is marked as unsafe due to raw pointer manipulation and JNI interaction.
-/// - Assumes that the provided publisher pointer is valid and has not been modified or freed.
-/// - The publisher pointer remains valid after this function call.
-/// - May throw an exception in case of failure, which must be handled by the caller.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIPublisher_deleteViaJNI(
@@ -93,9 +68,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIPublisher_deleteViaJNI(
     _class: JClass,
     publisher_ptr: *const Publisher<'static>,
     attachment: /*nullable*/ JByteArray,
-) {
+    error_out: JObjectArray,
+) -> jint {
     let publisher = OwnedObject::from_raw(publisher_ptr);
-    let _ = || -> ZResult<()> {
+    || -> ZResult<()> {
         let mut delete = publisher.delete();
         if !attachment.is_null() {
             let attachment = decode_byte_array(&env, attachment)?;
@@ -103,21 +79,15 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIPublisher_deleteViaJNI(
         };
         delete.wait().map_err(|err| zerror!(err))
     }()
-    .map_err(|err| throw_exception!(env, err));
+    .map_or_else(
+        |err| {
+            set_error_string(&mut env, &error_out, &err.to_string());
+            -1
+        },
+        |_| 0,
+    )
 }
 
-/// Frees the publisher.
-///
-/// # Parameters:
-/// - `_env`: The JNI environment.
-/// - `_class`: The JNI class.
-/// - `publisher_ptr`: The raw pointer to the Zenoh publisher ([Publisher]).
-///
-/// # Safety:
-/// - The function is marked as unsafe due to raw pointer manipulation.
-/// - It assumes that the provided publisher pointer is valid and has not been modified or freed.
-/// - After calling this function, the publisher pointer becomes invalid and should not be used anymore.
-///
 #[no_mangle]
 #[allow(non_snake_case)]
 pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIPublisher_freePtrViaJNI(

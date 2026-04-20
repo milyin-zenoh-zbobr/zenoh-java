@@ -31,6 +31,9 @@ internal class Logger {
          * See https://docs.rs/env_logger/latest/env_logger/index.html for accepted filter format.
          */
         @Throws(ZError::class)
-        fun start(filter: String) = JNILogger.startLogs(filter)
+        fun start(filter: String) {
+            val error = arrayOfNulls<String>(1)
+            if (JNILogger.startLogs(filter, error) < 0) throw ZError(error[0] ?: "Failed to start logs")
+        }
     }
 }

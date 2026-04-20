@@ -21,8 +21,7 @@ use zenoh::bytes::ZBytes;
 use zenoh_ext::{VarInt, ZDeserializeError, ZDeserializer, ZSerializer};
 
 use crate::{
-    errors::ZResult,
-    throw_exception,
+    errors::{set_error_string, ZResult},
     utils::{bytes_to_java_array, decode_byte_array},
     zerror,
 };
@@ -163,6 +162,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytes_serializeViaJNI(
     _class: JClass,
     any: JObject,
     token_type: JObject,
+    error_out: JObjectArray,
 ) -> jobject {
     || -> ZResult<jobject> {
         let mut serializer = ZSerializer::new();
@@ -174,7 +174,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytes_serializeViaJNI(
         Ok(byte_array.as_raw())
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         JObject::default().as_raw()
     })
 }
@@ -290,6 +290,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytes_deserializeViaJNI(
     _class: JClass,
     bytes: JByteArray,
     jtype: JObject,
+    error_out: JObjectArray,
 ) -> jobject {
     || -> ZResult<jobject> {
         let decoded_bytes: Vec<u8> = decode_byte_array(&env, bytes)?;
@@ -303,7 +304,7 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytes_deserializeViaJNI(
         Ok(obj)
     }()
     .unwrap_or_else(|err| {
-        throw_exception!(env, err);
+        set_error_string(&mut env, &error_out, &err.to_string());
         JObject::default().as_raw()
     })
 }

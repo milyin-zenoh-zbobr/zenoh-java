@@ -46,7 +46,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
          */
         @JvmStatic
         fun loadDefault(): Config {
-            return Config(JNIConfig.loadDefault())
+            val error = arrayOfNulls<String>(1)
+            return Config(JNIConfig.loadDefault(error) ?: throw ZError(error[0] ?: "Failed to load default config"))
         }
 
         /**
@@ -59,7 +60,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromFile(file: File): Config {
-            return Config(JNIConfig.loadFromFile(file.toString()))
+            val error = arrayOfNulls<String>(1)
+            return Config(JNIConfig.loadFromFile(file.toString(), error) ?: throw ZError(error[0] ?: "Failed to load config from file"))
         }
 
         /**
@@ -72,7 +74,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromFile(path: Path): Config {
-            return Config(JNIConfig.loadFromFile(path.toString()))
+            val error = arrayOfNulls<String>(1)
+            return Config(JNIConfig.loadFromFile(path.toString(), error) ?: throw ZError(error[0] ?: "Failed to load config from file"))
         }
 
         /**
@@ -87,7 +90,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromJson(config: String): Config {
-            return Config(JNIConfig.loadFromJson(config))
+            val error = arrayOfNulls<String>(1)
+            return Config(JNIConfig.loadFromJson(config, error) ?: throw ZError(error[0] ?: "Failed to load config from JSON"))
         }
 
         /**
@@ -102,7 +106,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromJson5(config: String): Config {
-            return Config(JNIConfig.loadFromJson(config))
+            val error = arrayOfNulls<String>(1)
+            return Config(JNIConfig.loadFromJson(config, error) ?: throw ZError(error[0] ?: "Failed to load config from JSON5"))
         }
 
         /**
@@ -117,7 +122,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromYaml(config: String): Config {
-            return Config(JNIConfig.loadFromYaml(config))
+            val error = arrayOfNulls<String>(1)
+            return Config(JNIConfig.loadFromYaml(config, error) ?: throw ZError(error[0] ?: "Failed to load config from YAML"))
         }
 
         /**
@@ -142,7 +148,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
      */
     @Throws(ZError::class)
     fun getJson(key: String): String {
-        return jniConfig.getJson(key)
+        val error = arrayOfNulls<String>(1)
+        return jniConfig.getJson(key, error) ?: throw ZError(error[0] ?: "Failed to get JSON for key: $key")
     }
 
     /**
@@ -150,7 +157,8 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
      */
     @Throws(ZError::class)
     fun insertJson5(key: String, value: String) {
-        jniConfig.insertJson5(key, value)
+        val error = arrayOfNulls<String>(1)
+        if (jniConfig.insertJson5(key, value, error) < 0) throw ZError(error[0] ?: "Failed to insert JSON5 for key: $key")
     }
 
     protected fun finalize() {

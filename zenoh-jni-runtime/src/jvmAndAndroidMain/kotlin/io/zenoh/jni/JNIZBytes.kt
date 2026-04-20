@@ -23,13 +23,13 @@ object JNIZBytes {
         ZenohLoad
     }
 
-    fun serialize(any: Any, type: Type): ByteArray = serializeViaJNI(any, type)
+    fun serialize(any: Any, type: Type, error: Array<String?>): Any? = serializeViaJNI(any, type, error)
 
-    fun deserialize(bytes: ByteArray, type: Type): Any = deserializeViaJNI(bytes, type)
-
-    @JvmStatic
-    private external fun serializeViaJNI(any: Any, type: Type): ByteArray
+    fun deserialize(bytes: ByteArray, type: Type, error: Array<String?>): Any? = deserializeViaJNI(bytes, type, error)
 
     @JvmStatic
-    private external fun deserializeViaJNI(bytes: ByteArray, type: Type): Any
+    private external fun serializeViaJNI(any: Any, type: Type, error: Array<String?>): Any?
+
+    @JvmStatic
+    private external fun deserializeViaJNI(bytes: ByteArray, type: Type, error: Array<String?>): Any?
 }

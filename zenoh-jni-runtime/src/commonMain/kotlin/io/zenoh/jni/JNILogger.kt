@@ -15,7 +15,6 @@
 package io.zenoh.jni
 
 import io.zenoh.ZenohLoad
-import io.zenoh.exceptions.ZError
 
 /** Adapter for initializing Rust logging through JNI. */
 public object JNILogger {
@@ -29,9 +28,7 @@ public object JNILogger {
      *
      * See https://docs.rs/env_logger/latest/env_logger/index.html for accepted filter format.
      */
-    @Throws(ZError::class)
-    fun startLogs(filter: String) = startLogsViaJNI(filter)
+    fun startLogs(filter: String, error: Array<String?>): Int = startLogsViaJNI(filter, error)
 
-    @Throws(ZError::class)
-    private external fun startLogsViaJNI(filter: String)
+    private external fun startLogsViaJNI(filter: String, error: Array<String?>): Int
 }
