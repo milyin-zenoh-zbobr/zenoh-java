@@ -25,7 +25,7 @@ import kotlin.test.assertEquals
 // Test-only 2-param wrappers that delegate to the new error-array API.
 private fun JNIZBytesKotlin.serialize(any: Any, kType: KType): ByteArray {
     val error = arrayOfNulls<String>(1)
-    return serialize(any, kType, error) as ByteArray? ?: error("Serialize failed: ${error[0]}")
+    return serialize(any, kType, error) ?: error("Serialize failed: ${error[0]}")
 }
 
 private fun JNIZBytesKotlin.deserialize(bytes: ByteArray, kType: KType): Any? {
@@ -35,7 +35,7 @@ private fun JNIZBytesKotlin.deserialize(bytes: ByteArray, kType: KType): Any? {
 
 private fun JNIZBytes.serialize(any: Any, type: java.lang.reflect.Type): ByteArray {
     val error = arrayOfNulls<String>(1)
-    return serialize(any, type, error) as ByteArray? ?: error("Serialize failed: ${error[0]}")
+    return serialize(any, type, error) ?: error("Serialize failed: ${error[0]}")
 }
 
 private fun JNIZBytes.deserialize(bytes: ByteArray, type: java.lang.reflect.Type): Any? {

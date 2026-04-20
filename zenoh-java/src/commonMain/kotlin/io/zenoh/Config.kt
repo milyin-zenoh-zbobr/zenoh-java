@@ -45,6 +45,7 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
          * Returns the default config.
          */
         @JvmStatic
+        @Throws(ZError::class)
         fun loadDefault(): Config {
             val error = arrayOfNulls<String>(1)
             return Config(JNIConfig.loadDefault(error) ?: throw ZError(error[0] ?: "Failed to load default config"))
