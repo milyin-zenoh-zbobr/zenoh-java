@@ -14,6 +14,7 @@
 
 package io.zenoh.config
 
+import io.zenoh.exceptions.ZError
 import io.zenoh.jni.JNIZenohId
 import kotlin.math.absoluteValue
 
@@ -22,8 +23,10 @@ import kotlin.math.absoluteValue
  */
 data class ZenohId internal constructor(internal val bytes: ByteArray) {
 
+    @Throws(ZError::class)
     override fun toString(): String {
-        return JNIZenohId.toString(bytes)
+        val error = arrayOfNulls<String>(1)
+        return JNIZenohId.toString(bytes, error) ?: throw ZError(error[0] ?: "Unable to convert ZenohId to string.")
     }
 
     override fun equals(other: Any?): Boolean {
