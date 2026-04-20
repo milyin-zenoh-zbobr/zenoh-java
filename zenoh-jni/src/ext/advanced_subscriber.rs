@@ -15,7 +15,10 @@
 use std::sync::Arc;
 
 use jni::sys::jboolean;
-use jni::{objects::{JClass, JObjectArray}, JNIEnv};
+use jni::{
+    objects::{JClass, JObjectArray},
+    JNIEnv,
+};
 use zenoh::handlers::{Callback, DefaultHandler};
 use zenoh::pubsub::Subscriber;
 use zenoh_ext::SampleMissListener;
