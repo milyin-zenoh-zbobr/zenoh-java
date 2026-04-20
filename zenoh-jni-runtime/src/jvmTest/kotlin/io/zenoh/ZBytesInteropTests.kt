@@ -16,10 +16,32 @@ package io.zenoh
 
 import io.zenoh.jni.JNIZBytes
 import io.zenoh.jni.JNIZBytesKotlin
+import kotlin.reflect.KType
 import kotlin.reflect.typeOf
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+
+// Test-only 2-param wrappers that delegate to the new error-array API.
+private fun JNIZBytesKotlin.serialize(any: Any, kType: KType): ByteArray {
+    val error = arrayOfNulls<String>(1)
+    return serialize(any, kType, error) as ByteArray? ?: error("Serialize failed: ${error[0]}")
+}
+
+private fun JNIZBytesKotlin.deserialize(bytes: ByteArray, kType: KType): Any? {
+    val error = arrayOfNulls<String>(1)
+    return deserialize(bytes, kType, error) ?: error("Deserialize failed: ${error[0]}")
+}
+
+private fun JNIZBytes.serialize(any: Any, type: java.lang.reflect.Type): ByteArray {
+    val error = arrayOfNulls<String>(1)
+    return serialize(any, type, error) as ByteArray? ?: error("Serialize failed: ${error[0]}")
+}
+
+private fun JNIZBytes.deserialize(bytes: ByteArray, type: java.lang.reflect.Type): Any? {
+    val error = arrayOfNulls<String>(1)
+    return deserialize(bytes, type, error) ?: error("Deserialize failed: ${error[0]}")
+}
 
 /**
  * Tests for Java/Kotlin serialization interoperability at the JNI bridge layer.

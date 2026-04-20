@@ -23,7 +23,7 @@ public object JNIZenohId {
         ZenohLoad
     }
 
-    fun toString(bytes: ByteArray): String = toStringViaJNI(bytes)
+    fun toString(bytes: ByteArray, error: Array<String?>): String? = toStringViaJNI(bytes, error)
 
-    private external fun toStringViaJNI(bytes: ByteArray): String
+    private external fun toStringViaJNI(bytes: ByteArray, error: Array<String?>): String?
 }
