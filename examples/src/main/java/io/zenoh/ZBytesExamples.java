@@ -15,6 +15,7 @@
 package io.zenoh;
 
 import io.zenoh.bytes.ZBytes;
+import io.zenoh.exceptions.ZError;
 import io.zenoh.ext.ZDeserializer;
 import io.zenoh.ext.ZSerializer;
 
@@ -24,7 +25,7 @@ import java.util.Map;
 
 public class ZBytesExamples {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws ZError {
 
         /*
          * ZBytes
