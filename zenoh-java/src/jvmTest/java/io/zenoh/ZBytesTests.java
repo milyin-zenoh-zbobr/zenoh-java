@@ -14,6 +14,7 @@
 
 package io.zenoh;
 
+import io.zenoh.exceptions.ZError;
 import io.zenoh.ext.ZDeserializer;
 import io.zenoh.ext.ZSerializer;
 import org.junit.Test;
@@ -37,7 +38,7 @@ public class ZBytesTests {
      ***********************************************/
 
     @Test
-    public void testIntSerializationAndDeserialization() {
+    public void testIntSerializationAndDeserialization() throws ZError {
         int intInput = 1234;
         var serializer = new ZSerializer<Integer>() {};
         var payload = serializer.serialize(intInput);
@@ -48,7 +49,7 @@ public class ZBytesTests {
     }
 
     @Test
-    public void testFloatSerializationAndDeserialization() {
+    public void testFloatSerializationAndDeserialization() throws ZError {
         float floatInput = 3.1415f;
 
         ZSerializer<Float> serializer = new ZSerializer<>() {};
@@ -61,7 +62,7 @@ public class ZBytesTests {
     }
 
     @Test
-    public void testStringSerializationAndDeserialization() {
+    public void testStringSerializationAndDeserialization() throws ZError {
         String stringInput = "example";
 
         ZSerializer<String> serializer = new ZSerializer<>() {};
@@ -74,7 +75,7 @@ public class ZBytesTests {
     }
 
     @Test
-    public void testByteArraySerializationAndDeserialization() {
+    public void testByteArraySerializationAndDeserialization() throws ZError {
         byte[] byteArrayInput = "example".getBytes();
 
         ZSerializer<byte[]> serializer = new ZSerializer<>() {};
@@ -87,7 +88,7 @@ public class ZBytesTests {
     }
 
     @Test
-    public void testListOfStringsSerializationAndDeserialization() {
+    public void testListOfStringsSerializationAndDeserialization() throws ZError {
         List<String> inputList = List.of("sample1", "sample2", "sample3");
 
         ZSerializer<List<String>> serializer = new ZSerializer<>() {};
@@ -100,7 +101,7 @@ public class ZBytesTests {
     }
 
     @Test
-    public void testListOfByteArraysSerializationAndDeserialization() {
+    public void testListOfByteArraysSerializationAndDeserialization() throws ZError {
         List<byte[]> inputList = Stream.of("sample1", "sample2", "sample3")
                 .map(String::getBytes)
                 .collect(Collectors.toList());
@@ -115,7 +116,7 @@ public class ZBytesTests {
     }
 
     @Test
-    public void testMapOfStringsSerializationAndDeserialization() {
+    public void testMapOfStringsSerializationAndDeserialization() throws ZError {
         Map<String, String> inputMap = Map.of("key1", "value1", "key2", "value2", "key3", "value3");
 
         // Create serializer
@@ -134,7 +135,7 @@ public class ZBytesTests {
      **********************************************/
 
     @Test
-    public void testBooleanSerializationAndDeserialization() {
+    public void testBooleanSerializationAndDeserialization() throws ZError {
         boolean booleanInput = true;
 
         // Create serializer
@@ -153,7 +154,7 @@ public class ZBytesTests {
      **********************************************/
 
     @Test
-    public void testListOfBooleansSerializationAndDeserialization() {
+    public void testListOfBooleansSerializationAndDeserialization() throws ZError {
         List<Boolean> listBooleanInput = List.of(true, false, true);
 
         // Create serializer
@@ -168,7 +169,7 @@ public class ZBytesTests {
     }
 
     @Test
-    public void testMapOfStringToListOfIntSerializationAndDeserialization() {
+    public void testMapOfStringToListOfIntSerializationAndDeserialization() throws ZError {
         Map<String, List<Integer>> mapOfListInput = Map.of("numbers", List.of(1, 2, 3, 4, 5));
 
         // Create serializer
