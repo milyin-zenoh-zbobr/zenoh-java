@@ -14,13 +14,13 @@
 
 use std::sync::Arc;
 
-use crate::errors::{set_error_string, ZResult};
+use crate::errors::{make_error_jstring, ZResult};
 use crate::utils::{decode_byte_array, decode_encoding};
 use crate::zerror;
-use crate::{key_expr::process_kotlin_key_expr};
+use crate::key_expr::process_kotlin_key_expr;
 use jni::{
-    objects::{JByteArray, JClass, JObjectArray, JString},
-    sys::{jboolean, jint, jlong},
+    objects::{JByteArray, JClass, JString},
+    sys::{jboolean, jlong, jstring},
     JNIEnv,
 };
 use uhlc::ID;
@@ -31,6 +31,28 @@ use zenoh::{
     Wait,
 };
 
+/// Sends a success reply to a [Query] via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `query_ptr`: Raw pointer to the [Query] (consumed).
+/// - `key_expr_ptr`: Nullable pointer to a declared [KeyExpr].
+/// - `key_expr_str`: String representation of the key expression.
+/// - `payload`: The reply payload bytes.
+/// - `encoding_id`: Encoding ID of the payload.
+/// - `encoding_schema`: Nullable encoding schema string.
+/// - `timestamp_enabled`: Whether to attach a timestamp.
+/// - `timestamp_ntp_64`: NTP64 timestamp value (used if `timestamp_enabled` != 0).
+/// - `attachment`: Nullable attachment bytes.
+/// - `qos_express`: Whether to mark the reply as express.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `query_ptr` must be a valid pointer; ownership is transferred (consumed).
+/// - `key_expr_ptr`, if non-null, must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replySuccessViaJNI(
@@ -40,14 +62,13 @@ pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replySuccessViaJNI(
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
     payload: JByteArray,
-    encoding_id: jint,
+    encoding_id: jni::sys::jint,
     encoding_schema: /*nullable*/ JString,
     timestamp_enabled: jboolean,
     timestamp_ntp_64: jlong,
     attachment: /*nullable*/ JByteArray,
     qos_express: jboolean,
-    error_out: JObjectArray,
-) -> jint {
+) -> jstring {
     || -> ZResult<()> {
         let query = Arc::from_raw(query_ptr);
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
@@ -66,14 +87,26 @@ pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replySuccessViaJNI(
         reply_builder.wait().map_err(|err| zerror!(err))
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 
+/// Sends an error reply to a [Query] via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `query_ptr`: Raw pointer to the [Query] (consumed).
+/// - `payload`: The error payload bytes.
+/// - `encoding_id`: Encoding ID of the payload.
+/// - `encoding_schema`: Nullable encoding schema string.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `query_ptr` must be a valid pointer; ownership is transferred (consumed).
 #[no_mangle]
 #[allow(non_snake_case)]
 pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replyErrorViaJNI(
@@ -81,10 +114,9 @@ pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replyErrorViaJNI(
     _class: JClass,
     query_ptr: *const Query,
     payload: JByteArray,
-    encoding_id: jint,
+    encoding_id: jni::sys::jint,
     encoding_schema: /*nullable*/ JString,
-    error_out: JObjectArray,
-) -> jint {
+) -> jstring {
     || -> ZResult<()> {
         let query = Arc::from_raw(query_ptr);
         let encoding = decode_encoding(&mut env, encoding_id, &encoding_schema)?;
@@ -95,14 +127,30 @@ pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replyErrorViaJNI(
             .map_err(|err| zerror!(err))
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 
+/// Sends a delete reply to a [Query] via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `query_ptr`: Raw pointer to the [Query] (consumed).
+/// - `key_expr_ptr`: Nullable pointer to a declared [KeyExpr].
+/// - `key_expr_str`: String representation of the key expression.
+/// - `timestamp_enabled`: Whether to attach a timestamp.
+/// - `timestamp_ntp_64`: NTP64 timestamp value (used if `timestamp_enabled` != 0).
+/// - `attachment`: Nullable attachment bytes.
+/// - `qos_express`: Whether to mark the reply as express.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `query_ptr` must be a valid pointer; ownership is transferred (consumed).
+/// - `key_expr_ptr`, if non-null, must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replyDeleteViaJNI(
@@ -115,8 +163,7 @@ pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replyDeleteViaJNI(
     timestamp_ntp_64: jlong,
     attachment: /*nullable*/ JByteArray,
     qos_express: jboolean,
-    error_out: JObjectArray,
-) -> jint {
+) -> jstring {
     || -> ZResult<()> {
         let query = Arc::from_raw(query_ptr);
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
@@ -132,11 +179,8 @@ pub(crate) unsafe extern "C" fn Java_io_zenoh_jni_JNIQuery_replyDeleteViaJNI(
         reply_builder.wait().map_err(|err| zerror!(err))
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 

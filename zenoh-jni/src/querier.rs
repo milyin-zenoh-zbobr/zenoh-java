@@ -15,14 +15,14 @@
 use std::sync::Arc;
 
 use jni::{
-    objects::{JByteArray, JClass, JObject, JObjectArray, JString},
-    sys::jint,
+    objects::{JByteArray, JClass, JObject, JString},
+    sys::jstring,
     JNIEnv,
 };
 use zenoh::{key_expr::KeyExpr, query::Querier, Wait};
 
 use crate::{
-    errors::{set_error_string, ZResult},
+    errors::{make_error_jstring, ZResult},
     key_expr::process_kotlin_key_expr,
     owned_object::OwnedObject,
     session::{on_reply_error, on_reply_success},
@@ -33,6 +33,27 @@ use crate::{
     zerror,
 };
 
+/// Performs a GET operation on a [Querier] via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `querier_ptr`: Raw pointer to the [Querier].
+/// - `key_expr_ptr`: Nullable pointer to a declared [KeyExpr].
+/// - `key_expr_str`: String representation of the key expression.
+/// - `selector_params`: Nullable selector parameters string.
+/// - `callback`: Callback invoked for each reply.
+/// - `on_close`: Callback invoked when the query completes.
+/// - `attachment`: Nullable attachment bytes.
+/// - `payload`: Nullable payload bytes.
+/// - `encoding_id`: Encoding ID (used if `payload` is non-null).
+/// - `encoding_schema`: Nullable encoding schema string.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `querier_ptr` and `key_expr_ptr` (if non-null) must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIQuerier_getViaJNI(
@@ -46,10 +67,9 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIQuerier_getViaJNI(
     on_close: JObject,
     attachment: /*nullable*/ JByteArray,
     payload: /*nullable*/ JByteArray,
-    encoding_id: jint,
+    encoding_id: jni::sys::jint,
     encoding_schema: /*nullable*/ JString,
-    error_out: JObjectArray,
-) -> jint {
+) -> jstring {
     let querier = OwnedObject::from_raw(querier_ptr);
     || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
@@ -99,11 +119,8 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIQuerier_getViaJNI(
             .map_err(|err| zerror!(err))
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 

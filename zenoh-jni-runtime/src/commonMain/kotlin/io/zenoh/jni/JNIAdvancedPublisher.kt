@@ -24,41 +24,42 @@ import io.zenoh.jni.callbacks.JNIOnCloseCallback
  */
 public class JNIAdvancedPublisher(private val ptr: Long) {
 
-    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?, error: Array<String?>): Int =
-        putViaJNI(ptr, payload, encodingId, encodingSchema, attachment, error)
+    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?): String? =
+        putViaJNI(ptr, payload, encodingId, encodingSchema, attachment)
 
-    fun delete(attachment: ByteArray?, error: Array<String?>): Int = deleteViaJNI(ptr, attachment, error)
+    fun delete(attachment: ByteArray?): String? = deleteViaJNI(ptr, attachment)
 
-    fun declareMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>): JNIMatchingListener? {
-        val listenerPtr = declareMatchingListenerViaJNI(ptr, callback, onClose, error)
-        return if (listenerPtr == 0L) null else JNIMatchingListener(listenerPtr)
+    fun declareMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, out: Array<JNIMatchingListener?>): String? {
+        val rawOut = LongArray(1)
+        val err = declareMatchingListenerViaJNI(ptr, callback, onClose, rawOut)
+        if (err == null) out[0] = JNIMatchingListener(rawOut[0])
+        return err
     }
 
-    fun declareBackgroundMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>): Int =
-        declareBackgroundMatchingListenerViaJNI(ptr, callback, onClose, error)
+    fun declareBackgroundMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback): String? =
+        declareBackgroundMatchingListenerViaJNI(ptr, callback, onClose)
 
-    /** Returns 1 (true), 0 (false), or -1 (error). */
-    fun getMatchingStatus(error: Array<String?>): Int = getMatchingStatusViaJNI(ptr, error)
+    fun getMatchingStatus(out: IntArray): String? = getMatchingStatusViaJNI(ptr, out)
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
     private external fun putViaJNI(
-        ptr: Long, payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?, error: Array<String?>
-    ): Int
+        ptr: Long, payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?
+    ): String?
 
-    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?, error: Array<String?>): Int
+    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?): String?
 
     private external fun declareMatchingListenerViaJNI(
-        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>
-    ): Long
+        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, out: LongArray
+    ): String?
 
     private external fun declareBackgroundMatchingListenerViaJNI(
-        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, error: Array<String?>
-    ): Int
+        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback
+    ): String?
 
-    private external fun getMatchingStatusViaJNI(ptr: Long, error: Array<String?>): Int
+    private external fun getMatchingStatusViaJNI(ptr: Long, out: IntArray): String?
 
     private external fun freePtrViaJNI(ptr: Long)
 }

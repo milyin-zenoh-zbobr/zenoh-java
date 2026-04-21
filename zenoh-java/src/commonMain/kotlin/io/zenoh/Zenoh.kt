@@ -60,10 +60,9 @@ object Zenoh {
             handler.handle(Hello(WhatAmI.fromInt(whatAmI), ZenohId(id), locators))
         }
         val binaryWhatAmI = scoutOptions.whatAmI.map { it.value }.reduce { acc, it -> acc or it }
-        val error = arrayOfNulls<String>(1)
-        val jniScout = JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig, error)
-            ?: throw ZError(error[0] ?: "Scout failed")
-        return HandlerScout(jniScout, handler.receiver())
+        val out = arrayOfNulls<JNIScout>(1)
+        JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig, out)?.let { throw ZError(it) }
+        return HandlerScout(out[0]!!, handler.receiver())
     }
 
     /**
@@ -85,10 +84,9 @@ object Zenoh {
             handler.handle(Hello(WhatAmI.fromInt(whatAmI), ZenohId(id), locators))
         }
         val binaryWhatAmI = scoutOptions.whatAmI.map { it.value }.reduce { acc, it -> acc or it }
-        val error = arrayOfNulls<String>(1)
-        val jniScout = JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig, error)
-            ?: throw ZError(error[0] ?: "Scout failed")
-        return HandlerScout(jniScout, handler.receiver())
+        val out = arrayOfNulls<JNIScout>(1)
+        JNIScout.scout(binaryWhatAmI, scoutCallback, handler::onClose, scoutOptions.config?.jniConfig, out)?.let { throw ZError(it) }
+        return HandlerScout(out[0]!!, handler.receiver())
     }
 
     /**
@@ -109,10 +107,9 @@ object Zenoh {
             callback.run(Hello(WhatAmI.fromInt(whatAmI), ZenohId(id), locators))
         }
         val binaryWhatAmI = scoutOptions.whatAmI.map { it.value }.reduce { acc, it -> acc or it }
-        val error = arrayOfNulls<String>(1)
-        val jniScout = JNIScout.scout(binaryWhatAmI, scoutCallback, fun() {}, scoutOptions.config?.jniConfig, error)
-            ?: throw ZError(error[0] ?: "Scout failed")
-        return CallbackScout(jniScout)
+        val out = arrayOfNulls<JNIScout>(1)
+        JNIScout.scout(binaryWhatAmI, scoutCallback, fun() {}, scoutOptions.config?.jniConfig, out)?.let { throw ZError(it) }
+        return CallbackScout(out[0]!!)
     }
 
     /**

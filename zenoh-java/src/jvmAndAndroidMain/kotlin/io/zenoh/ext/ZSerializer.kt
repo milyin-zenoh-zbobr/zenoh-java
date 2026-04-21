@@ -106,9 +106,8 @@ abstract class ZSerializer<T>: TypeToken<T>() {
      */
     @Throws(ZError::class)
     fun serialize(t: T): ZBytes {
-        val error = arrayOfNulls<String>(1)
-        val result = JNIZBytes.serialize(t as Any, this.type, error)
-            ?: throw ZError(error[0] ?: "Serialization failed")
-        return ZBytes(result)
+        val out = arrayOfNulls<ByteArray>(1)
+        JNIZBytes.serialize(t as Any, this.type, out)?.let { throw ZError(it) }
+        return ZBytes(out[0]!!)
     }
 }

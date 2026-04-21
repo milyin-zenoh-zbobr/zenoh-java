@@ -14,52 +14,96 @@
 
 use std::sync::Arc;
 
-use jni::objects::{JClass, JObjectArray};
+use jni::objects::{JClass, JIntArray, JObjectArray};
 use jni::sys::{jint, jstring};
 use jni::{objects::JString, JNIEnv};
 use zenoh::key_expr::KeyExpr;
 
-use crate::errors::{set_error_string, ZResult};
+use crate::errors::{make_error_jstring, ZResult};
 use crate::owned_object::OwnedObject;
 use crate::utils::decode_string;
 use crate::zerror;
 
+/// Validates a key expression string via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `key_expr`: The key expression string to validate.
+/// - `out`: Single-element `String[]`; receives the validated key expression on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_tryFromViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     key_expr: JString,
-    error_out: JObjectArray,
+    out: JObjectArray,
 ) -> jstring {
-    validate_key_expr(&mut env, &key_expr)
-        .map(|_| **key_expr)
-        .unwrap_or_else(|err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            JString::default().as_raw()
-        })
+    || -> ZResult<()> {
+        validate_key_expr(&mut env, &key_expr)?;
+        env.set_object_array_element(&out, 0, &key_expr)
+            .map_err(|err| zerror!(err))
+    }()
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Autocanonizes a key expression string via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `key_expr`: The key expression string to canonize and validate.
+/// - `out`: Single-element `String[]`; receives the canonized key expression on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_autocanonizeViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     key_expr: JString,
-    error_out: JObjectArray,
+    out: JObjectArray,
 ) -> jstring {
-    autocanonize_key_expr(&mut env, &key_expr)
-        .and_then(|key_expr| {
-            env.new_string(key_expr.to_string())
-                .map(|kexp| kexp.as_raw())
-                .map_err(|err| zerror!(err))
-        })
-        .unwrap_or_else(|err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            JString::default().as_raw()
-        })
+    || -> ZResult<()> {
+        let canonized = autocanonize_key_expr(&mut env, &key_expr)?;
+        let jstr = env
+            .new_string(canonized.to_string())
+            .map_err(|err| zerror!(err))?;
+        env.set_object_array_element(&out, 0, &jstr)
+            .map_err(|err| zerror!(err))
+    }()
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Returns whether two key expressions intersect via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `key_expr_ptr_1`: Nullable pointer to the first declared key expression.
+/// - `key_expr_str_1`: String representation of the first key expression.
+/// - `key_expr_ptr_2`: Nullable pointer to the second declared key expression.
+/// - `key_expr_str_2`: String representation of the second key expression.
+/// - `out`: Single-element `int[]`; receives 1 (true) or 0 (false) on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - Key expression pointers, if non-null, must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_intersectsViaJNI(
@@ -69,19 +113,38 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_intersectsV
     key_expr_str_1: JString,
     key_expr_ptr_2: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str_2: JString,
-    error_out: JObjectArray,
-) -> jint {
-    || -> ZResult<jint> {
+    out: JIntArray,
+) -> jstring {
+    || -> ZResult<()> {
         let key_expr_1 = process_kotlin_key_expr(&mut env, &key_expr_str_1, key_expr_ptr_1)?;
         let key_expr_2 = process_kotlin_key_expr(&mut env, &key_expr_str_2, key_expr_ptr_2)?;
-        Ok(key_expr_1.intersects(&key_expr_2) as jint)
+        let result = key_expr_1.intersects(&key_expr_2) as jint;
+        env.set_int_array_region(&out, 0, &[result])
+            .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        -1
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Returns whether the first key expression includes the second via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `key_expr_ptr_1`: Nullable pointer to the first declared key expression.
+/// - `key_expr_str_1`: String representation of the first key expression.
+/// - `key_expr_ptr_2`: Nullable pointer to the second declared key expression.
+/// - `key_expr_str_2`: String representation of the second key expression.
+/// - `out`: Single-element `int[]`; receives 1 (true) or 0 (false) on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - Key expression pointers, if non-null, must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_includesViaJNI(
@@ -91,19 +154,38 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_includesVia
     key_expr_str_1: JString,
     key_expr_ptr_2: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str_2: JString,
-    error_out: JObjectArray,
-) -> jint {
-    || -> ZResult<jint> {
+    out: JIntArray,
+) -> jstring {
+    || -> ZResult<()> {
         let key_expr_1 = process_kotlin_key_expr(&mut env, &key_expr_str_1, key_expr_ptr_1)?;
         let key_expr_2 = process_kotlin_key_expr(&mut env, &key_expr_str_2, key_expr_ptr_2)?;
-        Ok(key_expr_1.includes(&key_expr_2) as jint)
+        let result = key_expr_1.includes(&key_expr_2) as jint;
+        env.set_int_array_region(&out, 0, &[result])
+            .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        -1
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Returns the set intersection relation between two key expressions via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `key_expr_ptr_1`: Nullable pointer to the first declared key expression.
+/// - `key_expr_str_1`: String representation of the first key expression.
+/// - `key_expr_ptr_2`: Nullable pointer to the second declared key expression.
+/// - `key_expr_str_2`: String representation of the second key expression.
+/// - `out`: Single-element `int[]`; receives the `SetIntersectionLevel` ordinal on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - Key expression pointers, if non-null, must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_relationToViaJNI(
@@ -113,19 +195,37 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_relationToV
     key_expr_str_1: JString,
     key_expr_ptr_2: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str_2: JString,
-    error_out: JObjectArray,
-) -> jint {
-    || -> ZResult<jint> {
+    out: JIntArray,
+) -> jstring {
+    || -> ZResult<()> {
         let key_expr_1 = process_kotlin_key_expr(&mut env, &key_expr_str_1, key_expr_ptr_1)?;
         let key_expr_2 = process_kotlin_key_expr(&mut env, &key_expr_str_2, key_expr_ptr_2)?;
-        Ok(key_expr_1.relation_to(&key_expr_2) as jint)
+        let result = key_expr_1.relation_to(&key_expr_2) as jint;
+        env.set_int_array_region(&out, 0, &[result])
+            .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        -1
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Joins two key expressions by inserting a `/` separator via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `key_expr_ptr_1`: Nullable pointer to the first declared key expression.
+/// - `key_expr_str_1`: String representation of the first key expression.
+/// - `key_expr_2`: The second key expression string to append.
+/// - `out`: Single-element `String[]`; receives the joined key expression on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `key_expr_ptr_1`, if non-null, must be a valid pointer not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_joinViaJNI(
@@ -134,24 +234,42 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_joinViaJNI(
     key_expr_ptr_1: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str_1: JString,
     key_expr_2: JString,
-    error_out: JObjectArray,
+    out: JObjectArray,
 ) -> jstring {
-    || -> ZResult<jstring> {
+    || -> ZResult<()> {
         let key_expr_1 = process_kotlin_key_expr(&mut env, &key_expr_str_1, key_expr_ptr_1)?;
         let key_expr_2_str = decode_string(&mut env, &key_expr_2)?;
         let result = key_expr_1
             .join(key_expr_2_str.as_str())
             .map_err(|err| zerror!(err))?;
-        env.new_string(result.to_string())
-            .map(|kexp| kexp.as_raw())
+        let jstr = env
+            .new_string(result.to_string())
+            .map_err(|err| zerror!(err))?;
+        env.set_object_array_element(&out, 0, &jstr)
             .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        JString::default().as_raw()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Concatenates two key expressions without a separator via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `key_expr_ptr_1`: Nullable pointer to the first declared key expression.
+/// - `key_expr_str_1`: String representation of the first key expression.
+/// - `key_expr_2`: The second key expression string to append.
+/// - `out`: Single-element `String[]`; receives the concatenated key expression on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `key_expr_ptr_1`, if non-null, must be a valid pointer not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_concatViaJNI(
@@ -160,22 +278,24 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIKeyExpr_00024Companion_concatViaJN
     key_expr_ptr_1: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str_1: JString,
     key_expr_2: JString,
-    error_out: JObjectArray,
+    out: JObjectArray,
 ) -> jstring {
-    || -> ZResult<jstring> {
+    || -> ZResult<()> {
         let key_expr_1 = process_kotlin_key_expr(&mut env, &key_expr_str_1, key_expr_ptr_1)?;
         let key_expr_2_str = decode_string(&mut env, &key_expr_2)?;
         let result = key_expr_1
             .concat(key_expr_2_str.as_str())
             .map_err(|err| zerror!(err))?;
-        env.new_string(result.to_string())
-            .map(|kexp| kexp.as_raw())
+        let jstr = env
+            .new_string(result.to_string())
+            .map_err(|err| zerror!(err))?;
+        env.set_object_array_element(&out, 0, &jstr)
             .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        JString::default().as_raw()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 #[no_mangle]

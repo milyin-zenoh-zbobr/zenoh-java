@@ -23,6 +23,8 @@ import io.zenoh.exceptions.ZError
 import io.zenoh.handlers.BlockingQueueHandler
 import io.zenoh.handlers.Callback
 import io.zenoh.handlers.Handler
+import io.zenoh.jni.JNILivelinessToken
+import io.zenoh.jni.JNISubscriber
 import io.zenoh.jni.callbacks.JNIGetCallback
 import io.zenoh.jni.callbacks.JNISubscriberCallback
 import io.zenoh.keyexpr.KeyExpr
@@ -59,10 +61,9 @@ class Liveliness internal constructor(private val session: Session) {
     @Throws(ZError::class)
     fun declareToken(keyExpr: KeyExpr): LivelinessToken {
         val jniSession = session.jniSession ?: throw Session.sessionClosedException
-        val error = arrayOfNulls<String>(1)
-        val jniToken = jniSession.declareLivelinessToken(keyExpr.jniKeyExpr, keyExpr.keyExpr, error)
-            ?: throw ZError(error[0] ?: "Failed to declare liveliness token")
-        return LivelinessToken(jniToken)
+        val out = arrayOfNulls<JNILivelinessToken>(1)
+        jniSession.declareLivelinessToken(keyExpr.jniKeyExpr, keyExpr.keyExpr, out)?.let { throw ZError(it) }
+        return LivelinessToken(out[0]!!)
     }
 
     /**
@@ -80,16 +81,13 @@ class Liveliness internal constructor(private val session: Session) {
         val jniSession = session.jniSession ?: throw Session.sessionClosedException
         val handler = BlockingQueueHandler<Reply>(LinkedBlockingDeque())
         val getCallback = buildGetCallback(handler::handle)
-        val error = arrayOfNulls<String>(1)
-        val result = jniSession.livelinessGet(
+        jniSession.livelinessGet(
             keyExpr.jniKeyExpr,
             keyExpr.keyExpr,
             getCallback,
             timeout.toMillis(),
             handler::onClose,
-            error
-        )
-        if (result < 0) throw ZError(error[0] ?: "Liveliness get failed")
+        )?.let { throw ZError(it) }
         return handler.receiver()
     }
 
@@ -106,16 +104,13 @@ class Liveliness internal constructor(private val session: Session) {
         keyExpr: KeyExpr, callback: Callback<Reply>, timeout: Duration = Duration.ofMillis(10000)
     ) {
         val jniSession = session.jniSession ?: throw Session.sessionClosedException
-        val error = arrayOfNulls<String>(1)
-        val result = jniSession.livelinessGet(
+        jniSession.livelinessGet(
             keyExpr.jniKeyExpr,
             keyExpr.keyExpr,
             buildGetCallback(callback),
             timeout.toMillis(),
             fun() {},
-            error
-        )
-        if (result < 0) throw ZError(error[0] ?: "Liveliness get failed")
+        )?.let { throw ZError(it) }
     }
 
     /**
@@ -132,16 +127,13 @@ class Liveliness internal constructor(private val session: Session) {
         keyExpr: KeyExpr, handler: Handler<Reply, R>, timeout: Duration = Duration.ofMillis(10000)
     ): R {
         val jniSession = session.jniSession ?: throw Session.sessionClosedException
-        val error = arrayOfNulls<String>(1)
-        val result = jniSession.livelinessGet(
+        jniSession.livelinessGet(
             keyExpr.jniKeyExpr,
             keyExpr.keyExpr,
             buildGetCallback(handler::handle),
             timeout.toMillis(),
             handler::onClose,
-            error
-        )
-        if (result < 0) throw ZError(error[0] ?: "Liveliness get failed")
+        )?.let { throw ZError(it) }
         return handler.receiver()
     }
 
@@ -182,10 +174,9 @@ class Liveliness internal constructor(private val session: Session) {
         val handler = BlockingQueueHandler<Sample>(LinkedBlockingDeque())
         val jniSession = session.jniSession ?: throw Session.sessionClosedException
         val subCallback = buildSubscriberCallback(handler::handle)
-        val error = arrayOfNulls<String>(1)
-        val jniSubscriber = jniSession.declareLivelinessSubscriber(keyExpr.jniKeyExpr, keyExpr.keyExpr, subCallback, options.history, handler::onClose, error)
-            ?: throw ZError(error[0] ?: "Failed to declare liveliness subscriber")
-        return HandlerSubscriber(keyExpr, jniSubscriber, handler.receiver())
+        val out = arrayOfNulls<JNISubscriber>(1)
+        jniSession.declareLivelinessSubscriber(keyExpr.jniKeyExpr, keyExpr.keyExpr, subCallback, options.history, handler::onClose, out)?.let { throw ZError(it) }
+        return HandlerSubscriber(keyExpr, out[0]!!, handler.receiver())
     }
 
     /**
@@ -204,10 +195,9 @@ class Liveliness internal constructor(private val session: Session) {
     ): CallbackSubscriber {
         val jniSession = session.jniSession ?: throw Session.sessionClosedException
         val subCallback = buildSubscriberCallback(callback)
-        val error = arrayOfNulls<String>(1)
-        val jniSubscriber = jniSession.declareLivelinessSubscriber(keyExpr.jniKeyExpr, keyExpr.keyExpr, subCallback, options.history, fun() {}, error)
-            ?: throw ZError(error[0] ?: "Failed to declare liveliness subscriber")
-        return CallbackSubscriber(keyExpr, jniSubscriber)
+        val out = arrayOfNulls<JNISubscriber>(1)
+        jniSession.declareLivelinessSubscriber(keyExpr.jniKeyExpr, keyExpr.keyExpr, subCallback, options.history, fun() {}, out)?.let { throw ZError(it) }
+        return CallbackSubscriber(keyExpr, out[0]!!)
     }
 
     /**
@@ -227,10 +217,9 @@ class Liveliness internal constructor(private val session: Session) {
     ): HandlerSubscriber<R> {
         val jniSession = session.jniSession ?: throw Session.sessionClosedException
         val subCallback = buildSubscriberCallback(handler::handle)
-        val error = arrayOfNulls<String>(1)
-        val jniSubscriber = jniSession.declareLivelinessSubscriber(keyExpr.jniKeyExpr, keyExpr.keyExpr, subCallback, options.history, handler::onClose, error)
-            ?: throw ZError(error[0] ?: "Failed to declare liveliness subscriber")
-        return HandlerSubscriber(keyExpr, jniSubscriber, handler.receiver())
+        val out = arrayOfNulls<JNISubscriber>(1)
+        jniSession.declareLivelinessSubscriber(keyExpr.jniKeyExpr, keyExpr.keyExpr, subCallback, options.history, handler::onClose, out)?.let { throw ZError(it) }
+        return HandlerSubscriber(keyExpr, out[0]!!, handler.receiver())
     }
 
     private fun buildSubscriberCallback(callback: Callback<Sample>): JNISubscriberCallback =

@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-use jni::{objects::JObjectArray, JNIEnv};
+use jni::{sys::jstring, JNIEnv};
 
 #[macro_export]
 macro_rules! zerror {
@@ -37,15 +37,12 @@ impl fmt::Display for ZError {
     }
 }
 
-pub(crate) fn set_error_string(env: &mut JNIEnv, error_out: &JObjectArray, msg: &str) {
+/// Creates a JNI error string (non-null jstring) from `msg`.
+/// Returns null if the JVM cannot allocate the string (OOM); in that case a
+/// Java `OutOfMemoryError` is already pending and takes priority.
+pub(crate) fn make_error_jstring(env: &mut JNIEnv, msg: &str) -> jstring {
     match env.new_string(msg) {
-        Ok(jstr) => {
-            if let Err(err) = env.set_object_array_element(error_out, 0, jstr) {
-                tracing::error!("Failed to set error string in error_out array: {}", err);
-            }
-        }
-        Err(err) => {
-            tracing::error!("Failed to create JString for error message: {}", err);
-        }
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
     }
 }

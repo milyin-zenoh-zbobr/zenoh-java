@@ -31,11 +31,10 @@ public class JNIQuery(private val ptr: Long) {
         timestampNtp64: Long,
         attachment: ByteArray?,
         qosExpress: Boolean,
-        error: Array<String?>
-    ): Int = replySuccessViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, payload, encodingId, encodingSchema, timestampEnabled, timestampNtp64, attachment, qosExpress, error)
+    ): String? = replySuccessViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, payload, encodingId, encodingSchema, timestampEnabled, timestampNtp64, attachment, qosExpress)
 
-    fun replyError(errorPayload: ByteArray, encodingId: Int, encodingSchema: String?, error: Array<String?>): Int =
-        replyErrorViaJNI(ptr, errorPayload, encodingId, encodingSchema, error)
+    fun replyError(errorPayload: ByteArray, encodingId: Int, encodingSchema: String?): String? =
+        replyErrorViaJNI(ptr, errorPayload, encodingId, encodingSchema)
 
     fun replyDelete(
         jniKeyExpr: JNIKeyExpr?,
@@ -44,8 +43,7 @@ public class JNIQuery(private val ptr: Long) {
         timestampNtp64: Long,
         attachment: ByteArray?,
         qosExpress: Boolean,
-        error: Array<String?>
-    ): Int = replyDeleteViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, timestampEnabled, timestampNtp64, attachment, qosExpress, error)
+    ): String? = replyDeleteViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, timestampEnabled, timestampNtp64, attachment, qosExpress)
 
     fun close() {
         freePtrViaJNI(ptr)
@@ -62,16 +60,14 @@ public class JNIQuery(private val ptr: Long) {
         timestampNtp64: Long,
         attachment: ByteArray?,
         qosExpress: Boolean,
-        error: Array<String?>
-    ): Int
+    ): String?
 
     private external fun replyErrorViaJNI(
         queryPtr: Long,
         errorValuePayload: ByteArray,
         errorValueEncoding: Int,
         encodingSchema: String?,
-        error: Array<String?>
-    ): Int
+    ): String?
 
     private external fun replyDeleteViaJNI(
         queryPtr: Long,
@@ -81,8 +77,7 @@ public class JNIQuery(private val ptr: Long) {
         timestampNtp64: Long,
         attachment: ByteArray?,
         qosExpress: Boolean,
-        error: Array<String?>
-    ): Int
+    ): String?
 
     private external fun freePtrViaJNI(ptr: Long)
 }

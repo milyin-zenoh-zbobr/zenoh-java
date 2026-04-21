@@ -47,8 +47,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun loadDefault(): Config {
-            val error = arrayOfNulls<String>(1)
-            return Config(JNIConfig.loadDefault(error) ?: throw ZError(error[0] ?: "Failed to load default config"))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadDefault(out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -61,8 +62,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromFile(file: File): Config {
-            val error = arrayOfNulls<String>(1)
-            return Config(JNIConfig.loadFromFile(file.toString(), error) ?: throw ZError(error[0] ?: "Failed to load config from file"))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromFile(file.toString(), out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -75,8 +77,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromFile(path: Path): Config {
-            val error = arrayOfNulls<String>(1)
-            return Config(JNIConfig.loadFromFile(path.toString(), error) ?: throw ZError(error[0] ?: "Failed to load config from file"))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromFile(path.toString(), out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -91,8 +94,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromJson(config: String): Config {
-            val error = arrayOfNulls<String>(1)
-            return Config(JNIConfig.loadFromJson(config, error) ?: throw ZError(error[0] ?: "Failed to load config from JSON"))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromJson(config, out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -107,8 +111,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromJson5(config: String): Config {
-            val error = arrayOfNulls<String>(1)
-            return Config(JNIConfig.loadFromJson(config, error) ?: throw ZError(error[0] ?: "Failed to load config from JSON5"))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromJson(config, out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -123,8 +128,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromYaml(config: String): Config {
-            val error = arrayOfNulls<String>(1)
-            return Config(JNIConfig.loadFromYaml(config, error) ?: throw ZError(error[0] ?: "Failed to load config from YAML"))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromYaml(config, out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -149,8 +155,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
      */
     @Throws(ZError::class)
     fun getJson(key: String): String {
-        val error = arrayOfNulls<String>(1)
-        return jniConfig.getJson(key, error) ?: throw ZError(error[0] ?: "Failed to get JSON for key: $key")
+        val out = arrayOfNulls<String>(1)
+        jniConfig.getJson(key, out)?.let { throw ZError(it) }
+        return out[0]!!
     }
 
     /**
@@ -158,8 +165,7 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
      */
     @Throws(ZError::class)
     fun insertJson5(key: String, value: String) {
-        val error = arrayOfNulls<String>(1)
-        if (jniConfig.insertJson5(key, value, error) < 0) throw ZError(error[0] ?: "Failed to insert JSON5 for key: $key")
+        jniConfig.insertJson5(key, value)?.let { throw ZError(it) }
     }
 
     protected fun finalize() {

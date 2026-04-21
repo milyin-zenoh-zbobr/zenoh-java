@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::errors::{set_error_string, ZResult};
+use crate::errors::{make_error_jstring, ZResult};
 use crate::utils::decode_byte_array;
 use crate::zerror;
 use jni::{
@@ -22,23 +22,34 @@ use jni::{
 };
 use zenoh::session::ZenohId;
 
+/// Converts a Zenoh ID byte array to its string representation via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `zenoh_id`: The Zenoh ID as a `byte[]`.
+/// - `out`: Single-element `String[]`; receives the string representation on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIZenohId_toStringViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     zenoh_id: JByteArray,
-    error_out: JObjectArray,
+    out: JObjectArray,
 ) -> jstring {
-    || -> ZResult<JString> {
+    || -> ZResult<()> {
         let bytes = decode_byte_array(&env, zenoh_id)?;
         let zenohid = ZenohId::try_from(bytes.as_slice()).map_err(|err| zerror!(err))?;
-        env.new_string(zenohid.to_string())
+        let java_str = env.new_string(zenohid.to_string()).map_err(|err| zerror!(err))?;
+        env.set_object_array_element(&out, 0, &java_str)
             .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        JString::default()
-    })
-    .as_raw()
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }

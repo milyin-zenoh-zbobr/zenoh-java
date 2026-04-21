@@ -107,10 +107,9 @@ abstract class ZDeserializer<T>: TypeToken<T>() {
      */
     @Throws(ZError::class)
     fun deserialize(zbytes: IntoZBytes): T {
-        val error = arrayOfNulls<String>(1)
-        val result = JNIZBytes.deserialize(zbytes.into().bytes, this.type, error)
-            ?: throw ZError(error[0] ?: "Deserialization failed")
+        val out = arrayOfNulls<Any>(1)
+        JNIZBytes.deserialize(zbytes.into().bytes, this.type, out)?.let { throw ZError(it) }
         @Suppress("UNCHECKED_CAST")
-        return result as T
+        return out[0]!! as T
     }
 }

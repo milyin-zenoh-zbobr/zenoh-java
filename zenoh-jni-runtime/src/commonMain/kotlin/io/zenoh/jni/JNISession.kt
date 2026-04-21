@@ -28,13 +28,15 @@ public class JNISession(internal val sessionPtr: Long) {
             ZenohLoad
         }
 
-        fun open(config: JNIConfig, error: Array<String?>): JNISession? {
-            val sessionPtr = openSessionViaJNI(config.ptr, error)
-            return if (sessionPtr == 0L) null else JNISession(sessionPtr)
+        fun open(config: JNIConfig, out: Array<JNISession?>): String? {
+            val rawOut = LongArray(1)
+            val err = openSessionViaJNI(config.ptr, rawOut)
+            if (err == null) out[0] = JNISession(rawOut[0])
+            return err
         }
 
         @JvmStatic
-        private external fun openSessionViaJNI(configPtr: Long, error: Array<String?>): Long
+        private external fun openSessionViaJNI(configPtr: Long, out: LongArray): String?
     }
 
     private external fun closeSessionViaJNI(ptr: Long)
@@ -46,10 +48,12 @@ public class JNISession(internal val sessionPtr: Long) {
         priority: Int,
         express: Boolean,
         reliability: Int,
-        error: Array<String?>
-    ): JNIPublisher? {
-        val ptr = declarePublisherViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, congestionControl, priority, express, reliability, error)
-        return if (ptr == 0L) null else JNIPublisher(ptr)
+        out: Array<JNIPublisher?>
+    ): String? {
+        val rawOut = LongArray(1)
+        val err = declarePublisherViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, congestionControl, priority, express, reliability, rawOut)
+        if (err == null) out[0] = JNIPublisher(rawOut[0])
+        return err
     }
 
     private external fun declarePublisherViaJNI(
@@ -60,18 +64,20 @@ public class JNISession(internal val sessionPtr: Long) {
         priority: Int,
         express: Boolean,
         reliability: Int,
-        error: Array<String?>
-    ): Long
+        out: LongArray
+    ): String?
 
     fun declareSubscriber(
         jniKeyExpr: JNIKeyExpr?,
         keyExprString: String,
         callback: JNISubscriberCallback,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): JNISubscriber? {
-        val ptr = declareSubscriberViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, onClose, error)
-        return if (ptr == 0L) null else JNISubscriber(ptr)
+        out: Array<JNISubscriber?>
+    ): String? {
+        val rawOut = LongArray(1)
+        val err = declareSubscriberViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, onClose, rawOut)
+        if (err == null) out[0] = JNISubscriber(rawOut[0])
+        return err
     }
 
     private external fun declareSubscriberViaJNI(
@@ -80,8 +86,8 @@ public class JNISession(internal val sessionPtr: Long) {
         keyExprString: String,
         callback: JNISubscriberCallback,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): Long
+        out: LongArray
+    ): String?
 
     fun declareQueryable(
         jniKeyExpr: JNIKeyExpr?,
@@ -89,10 +95,12 @@ public class JNISession(internal val sessionPtr: Long) {
         callback: JNIQueryableCallback,
         onClose: JNIOnCloseCallback,
         complete: Boolean,
-        error: Array<String?>
-    ): JNIQueryable? {
-        val ptr = declareQueryableViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, onClose, complete, error)
-        return if (ptr == 0L) null else JNIQueryable(ptr)
+        out: Array<JNIQueryable?>
+    ): String? {
+        val rawOut = LongArray(1)
+        val err = declareQueryableViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, onClose, complete, rawOut)
+        if (err == null) out[0] = JNIQueryable(rawOut[0])
+        return err
     }
 
     private external fun declareQueryableViaJNI(
@@ -102,8 +110,8 @@ public class JNISession(internal val sessionPtr: Long) {
         callback: JNIQueryableCallback,
         onClose: JNIOnCloseCallback,
         complete: Boolean,
-        error: Array<String?>
-    ): Long
+        out: LongArray
+    ): String?
 
     fun declareQuerier(
         jniKeyExpr: JNIKeyExpr?,
@@ -115,10 +123,12 @@ public class JNISession(internal val sessionPtr: Long) {
         express: Boolean,
         timeoutMs: Long,
         acceptReplies: Int,
-        error: Array<String?>
-    ): JNIQuerier? {
-        val ptr = declareQuerierViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, target, consolidation, congestionControl, priority, express, timeoutMs, acceptReplies, error)
-        return if (ptr == 0L) null else JNIQuerier(ptr)
+        out: Array<JNIQuerier?>
+    ): String? {
+        val rawOut = LongArray(1)
+        val err = declareQuerierViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, target, consolidation, congestionControl, priority, express, timeoutMs, acceptReplies, rawOut)
+        if (err == null) out[0] = JNIQuerier(rawOut[0])
+        return err
     }
 
     private external fun declareQuerierViaJNI(
@@ -132,15 +142,17 @@ public class JNISession(internal val sessionPtr: Long) {
         express: Boolean,
         timeoutMs: Long,
         acceptReplies: Int,
-        error: Array<String?>
-    ): Long
+        out: LongArray
+    ): String?
 
-    fun declareKeyExpr(keyExpr: String, error: Array<String?>): JNIKeyExpr? {
-        val ptr = declareKeyExprViaJNI(sessionPtr, keyExpr, error)
-        return if (ptr == 0L) null else JNIKeyExpr(ptr)
+    fun declareKeyExpr(keyExpr: String, out: Array<JNIKeyExpr?>): String? {
+        val rawOut = LongArray(1)
+        val err = declareKeyExprViaJNI(sessionPtr, keyExpr, rawOut)
+        if (err == null) out[0] = JNIKeyExpr(rawOut[0])
+        return err
     }
 
-    private external fun declareKeyExprViaJNI(sessionPtr: Long, keyExpr: String, error: Array<String?>): Long
+    private external fun declareKeyExprViaJNI(sessionPtr: Long, keyExpr: String, out: LongArray): String?
 
     fun undeclareKeyExpr(jniKeyExpr: JNIKeyExpr) = undeclareKeyExprViaJNI(sessionPtr, jniKeyExpr.ptr)
 
@@ -163,8 +175,7 @@ public class JNISession(internal val sessionPtr: Long) {
         priority: Int,
         express: Boolean,
         acceptReplies: Int,
-        error: Array<String?>
-    ): Int = getViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, selectorParams, callback, onClose, timeoutMs, target, consolidation, attachmentBytes, payload, encodingId, encodingSchema, congestionControl, priority, express, acceptReplies, error)
+    ): String? = getViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, selectorParams, callback, onClose, timeoutMs, target, consolidation, attachmentBytes, payload, encodingId, encodingSchema, congestionControl, priority, express, acceptReplies)
 
     private external fun getViaJNI(
         sessionPtr: Long,
@@ -184,8 +195,7 @@ public class JNISession(internal val sessionPtr: Long) {
         priority: Int,
         express: Boolean,
         acceptReplies: Int,
-        error: Array<String?>
-    ): Int
+    ): String?
 
     fun put(
         jniKeyExpr: JNIKeyExpr?,
@@ -198,8 +208,7 @@ public class JNISession(internal val sessionPtr: Long) {
         express: Boolean,
         attachmentBytes: ByteArray?,
         reliability: Int,
-        error: Array<String?>
-    ): Int = putViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, valuePayload, valueEncoding, valueEncodingSchema, congestionControl, priority, express, attachmentBytes, reliability, error)
+    ): String? = putViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, valuePayload, valueEncoding, valueEncodingSchema, congestionControl, priority, express, attachmentBytes, reliability)
 
     private external fun putViaJNI(
         sessionPtr: Long,
@@ -213,8 +222,7 @@ public class JNISession(internal val sessionPtr: Long) {
         express: Boolean,
         attachmentBytes: ByteArray?,
         reliability: Int,
-        error: Array<String?>
-    ): Int
+    ): String?
 
     fun delete(
         jniKeyExpr: JNIKeyExpr?,
@@ -224,8 +232,7 @@ public class JNISession(internal val sessionPtr: Long) {
         express: Boolean,
         attachmentBytes: ByteArray?,
         reliability: Int,
-        error: Array<String?>
-    ): Int = deleteViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, congestionControl, priority, express, attachmentBytes, reliability, error)
+    ): String? = deleteViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, congestionControl, priority, express, attachmentBytes, reliability)
 
     private external fun deleteViaJNI(
         sessionPtr: Long,
@@ -236,20 +243,19 @@ public class JNISession(internal val sessionPtr: Long) {
         express: Boolean,
         attachmentBytes: ByteArray?,
         reliability: Int,
-        error: Array<String?>
-    ): Int
+    ): String?
 
-    fun getZid(error: Array<String?>): ByteArray? = getZidViaJNI(sessionPtr, error)
+    fun getZid(out: Array<ByteArray?>): String? = getZidViaJNI(sessionPtr, out)
 
-    private external fun getZidViaJNI(ptr: Long, error: Array<String?>): ByteArray?
+    private external fun getZidViaJNI(ptr: Long, out: Array<ByteArray?>): String?
 
-    fun getPeersZid(error: Array<String?>): List<ByteArray>? = getPeersZidViaJNI(sessionPtr, error)
+    fun getPeersZid(out: Array<List<ByteArray>?>): String? = getPeersZidViaJNI(sessionPtr, out)
 
-    private external fun getPeersZidViaJNI(ptr: Long, error: Array<String?>): List<ByteArray>?
+    private external fun getPeersZidViaJNI(ptr: Long, out: Array<List<ByteArray>?>): String?
 
-    fun getRoutersZid(error: Array<String?>): List<ByteArray>? = getRoutersZidViaJNI(sessionPtr, error)
+    fun getRoutersZid(out: Array<List<ByteArray>?>): String? = getRoutersZidViaJNI(sessionPtr, out)
 
-    private external fun getRoutersZidViaJNI(ptr: Long, error: Array<String?>): List<ByteArray>?
+    private external fun getRoutersZidViaJNI(ptr: Long, out: Array<List<ByteArray>?>): String?
 
     fun declareAdvancedSubscriber(
         jniKeyExpr: JNIKeyExpr?,
@@ -264,10 +270,12 @@ public class JNISession(internal val sessionPtr: Long) {
         subscriberDetection: Boolean,
         callback: JNISubscriberCallback,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): JNIAdvancedSubscriber? {
-        val ptr = declareAdvancedSubscriberViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprStr, historyConfigEnabled, historyDetectLatePublishers, historyMaxSamples, historyMaxAgeSeconds, recoveryConfigEnabled, recoveryConfigIsHeartbeat, recoveryQueryPeriodMs, subscriberDetection, callback, onClose, error)
-        return if (ptr == 0L) null else JNIAdvancedSubscriber(ptr)
+        out: Array<JNIAdvancedSubscriber?>
+    ): String? {
+        val rawOut = LongArray(1)
+        val err = declareAdvancedSubscriberViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprStr, historyConfigEnabled, historyDetectLatePublishers, historyMaxSamples, historyMaxAgeSeconds, recoveryConfigEnabled, recoveryConfigIsHeartbeat, recoveryQueryPeriodMs, subscriberDetection, callback, onClose, rawOut)
+        if (err == null) out[0] = JNIAdvancedSubscriber(rawOut[0])
+        return err
     }
 
     private external fun declareAdvancedSubscriberViaJNI(
@@ -284,8 +292,8 @@ public class JNISession(internal val sessionPtr: Long) {
         subscriberDetection: Boolean,
         callback: JNISubscriberCallback,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): Long
+        out: LongArray
+    ): String?
 
     fun declareAdvancedPublisher(
         jniKeyExpr: JNIKeyExpr?,
@@ -304,10 +312,12 @@ public class JNISession(internal val sessionPtr: Long) {
         sampleMissDetectionHeartbeatMs: Long,
         sampleMissDetectionHeartbeatIsSporadic: Boolean,
         publisherDetection: Boolean,
-        error: Array<String?>
-    ): JNIAdvancedPublisher? {
-        val ptr = declareAdvancedPublisherViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprStr, congestionControl, priority, isExpress, reliability, cacheEnabled, cacheMaxSamples, cacheRepliesPriority, cacheRepliesCongestionControl, cacheRepliesIsExpress, sampleMissDetectionEnabled, sampleMissDetectionEnableHeartbeat, sampleMissDetectionHeartbeatMs, sampleMissDetectionHeartbeatIsSporadic, publisherDetection, error)
-        return if (ptr == 0L) null else JNIAdvancedPublisher(ptr)
+        out: Array<JNIAdvancedPublisher?>
+    ): String? {
+        val rawOut = LongArray(1)
+        val err = declareAdvancedPublisherViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprStr, congestionControl, priority, isExpress, reliability, cacheEnabled, cacheMaxSamples, cacheRepliesPriority, cacheRepliesCongestionControl, cacheRepliesIsExpress, sampleMissDetectionEnabled, sampleMissDetectionEnableHeartbeat, sampleMissDetectionHeartbeatMs, sampleMissDetectionHeartbeatIsSporadic, publisherDetection, rawOut)
+        if (err == null) out[0] = JNIAdvancedPublisher(rawOut[0])
+        return err
     }
 
     private external fun declareAdvancedPublisherViaJNI(
@@ -328,15 +338,17 @@ public class JNISession(internal val sessionPtr: Long) {
         sampleMissDetectionHeartbeatMs: Long,
         sampleMissDetectionHeartbeatIsSporadic: Boolean,
         publisherDetection: Boolean,
-        error: Array<String?>
-    ): Long
+        out: LongArray
+    ): String?
 
-    fun declareLivelinessToken(jniKeyExpr: JNIKeyExpr?, keyExprString: String, error: Array<String?>): JNILivelinessToken? {
-        val ptr = declareLivelinessTokenViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, error)
-        return if (ptr == 0L) null else JNILivelinessToken(ptr)
+    fun declareLivelinessToken(jniKeyExpr: JNIKeyExpr?, keyExprString: String, out: Array<JNILivelinessToken?>): String? {
+        val rawOut = LongArray(1)
+        val err = declareLivelinessTokenViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, rawOut)
+        if (err == null) out[0] = JNILivelinessToken(rawOut[0])
+        return err
     }
 
-    private external fun declareLivelinessTokenViaJNI(sessionPtr: Long, keyExprPtr: Long, keyExprString: String, error: Array<String?>): Long
+    private external fun declareLivelinessTokenViaJNI(sessionPtr: Long, keyExprPtr: Long, keyExprString: String, out: LongArray): String?
 
     fun declareLivelinessSubscriber(
         jniKeyExpr: JNIKeyExpr?,
@@ -344,10 +356,12 @@ public class JNISession(internal val sessionPtr: Long) {
         callback: JNISubscriberCallback,
         history: Boolean,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): JNISubscriber? {
-        val ptr = declareLivelinessSubscriberViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, history, onClose, error)
-        return if (ptr == 0L) null else JNISubscriber(ptr)
+        out: Array<JNISubscriber?>
+    ): String? {
+        val rawOut = LongArray(1)
+        val err = declareLivelinessSubscriberViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, history, onClose, rawOut)
+        if (err == null) out[0] = JNISubscriber(rawOut[0])
+        return err
     }
 
     private external fun declareLivelinessSubscriberViaJNI(
@@ -357,8 +371,8 @@ public class JNISession(internal val sessionPtr: Long) {
         callback: JNISubscriberCallback,
         history: Boolean,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): Long
+        out: LongArray
+    ): String?
 
     fun livelinessGet(
         jniKeyExpr: JNIKeyExpr?,
@@ -366,8 +380,7 @@ public class JNISession(internal val sessionPtr: Long) {
         callback: JNIGetCallback,
         timeoutMs: Long,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): Int = livelinessGetViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, timeoutMs, onClose, error)
+    ): String? = livelinessGetViaJNI(sessionPtr, jniKeyExpr?.ptr ?: 0, keyExprString, callback, timeoutMs, onClose)
 
     private external fun livelinessGetViaJNI(
         sessionPtr: Long,
@@ -376,8 +389,7 @@ public class JNISession(internal val sessionPtr: Long) {
         callback: JNIGetCallback,
         timeoutMs: Long,
         onClose: JNIOnCloseCallback,
-        error: Array<String?>
-    ): Int
+    ): String?
 
     fun close() {
         closeSessionViaJNI(sessionPtr)

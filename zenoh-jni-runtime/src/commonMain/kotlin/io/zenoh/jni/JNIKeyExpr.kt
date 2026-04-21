@@ -24,41 +24,38 @@ public class JNIKeyExpr(internal val ptr: Long) {
             ZenohLoad
         }
 
-        fun tryFrom(keyExpr: String, error: Array<String?>): String? = tryFromViaJNI(keyExpr, error)
+        fun tryFrom(keyExpr: String, out: Array<String?>): String? = tryFromViaJNI(keyExpr, out)
 
-        fun autocanonize(keyExpr: String, error: Array<String?>): String? = autocanonizeViaJNI(keyExpr, error)
+        fun autocanonize(keyExpr: String, out: Array<String?>): String? = autocanonizeViaJNI(keyExpr, out)
 
-        private external fun tryFromViaJNI(keyExpr: String, error: Array<String?>): String?
+        private external fun tryFromViaJNI(keyExpr: String, out: Array<String?>): String?
 
-        private external fun autocanonizeViaJNI(keyExpr: String, error: Array<String?>): String?
+        private external fun autocanonizeViaJNI(keyExpr: String, out: Array<String?>): String?
 
-        /** Returns 1 (true), 0 (false), or -1 (error). */
-        fun intersects(a: JNIKeyExpr?, aStr: String, b: JNIKeyExpr?, bStr: String, error: Array<String?>): Int =
-            intersectsViaJNI(a?.ptr ?: 0, aStr, b?.ptr ?: 0, bStr, error)
+        fun intersects(a: JNIKeyExpr?, aStr: String, b: JNIKeyExpr?, bStr: String, out: IntArray): String? =
+            intersectsViaJNI(a?.ptr ?: 0, aStr, b?.ptr ?: 0, bStr, out)
 
-        /** Returns 1 (true), 0 (false), or -1 (error). */
-        fun includes(a: JNIKeyExpr?, aStr: String, b: JNIKeyExpr?, bStr: String, error: Array<String?>): Int =
-            includesViaJNI(a?.ptr ?: 0, aStr, b?.ptr ?: 0, bStr, error)
+        fun includes(a: JNIKeyExpr?, aStr: String, b: JNIKeyExpr?, bStr: String, out: IntArray): String? =
+            includesViaJNI(a?.ptr ?: 0, aStr, b?.ptr ?: 0, bStr, out)
 
-        /** Returns SetIntersectionLevel ordinal as Int, or -1 on error. */
-        fun relationTo(a: JNIKeyExpr?, aStr: String, b: JNIKeyExpr?, bStr: String, error: Array<String?>): Int =
-            relationToViaJNI(a?.ptr ?: 0, aStr, b?.ptr ?: 0, bStr, error)
+        fun relationTo(a: JNIKeyExpr?, aStr: String, b: JNIKeyExpr?, bStr: String, out: IntArray): String? =
+            relationToViaJNI(a?.ptr ?: 0, aStr, b?.ptr ?: 0, bStr, out)
 
-        fun join(a: JNIKeyExpr?, aStr: String, other: String, error: Array<String?>): String? =
-            joinViaJNI(a?.ptr ?: 0, aStr, other, error)
+        fun join(a: JNIKeyExpr?, aStr: String, other: String, out: Array<String?>): String? =
+            joinViaJNI(a?.ptr ?: 0, aStr, other, out)
 
-        fun concat(a: JNIKeyExpr?, aStr: String, other: String, error: Array<String?>): String? =
-            concatViaJNI(a?.ptr ?: 0, aStr, other, error)
+        fun concat(a: JNIKeyExpr?, aStr: String, other: String, out: Array<String?>): String? =
+            concatViaJNI(a?.ptr ?: 0, aStr, other, out)
 
-        private external fun intersectsViaJNI(ptrA: Long, keyExprA: String, ptrB: Long, keyExprB: String, error: Array<String?>): Int
+        private external fun intersectsViaJNI(ptrA: Long, keyExprA: String, ptrB: Long, keyExprB: String, out: IntArray): String?
 
-        private external fun includesViaJNI(ptrA: Long, keyExprA: String, ptrB: Long, keyExprB: String, error: Array<String?>): Int
+        private external fun includesViaJNI(ptrA: Long, keyExprA: String, ptrB: Long, keyExprB: String, out: IntArray): String?
 
-        private external fun relationToViaJNI(ptrA: Long, keyExprA: String, ptrB: Long, keyExprB: String, error: Array<String?>): Int
+        private external fun relationToViaJNI(ptrA: Long, keyExprA: String, ptrB: Long, keyExprB: String, out: IntArray): String?
 
-        private external fun joinViaJNI(ptrA: Long, keyExprA: String, other: String, error: Array<String?>): String?
+        private external fun joinViaJNI(ptrA: Long, keyExprA: String, other: String, out: Array<String?>): String?
 
-        private external fun concatViaJNI(ptrA: Long, keyExprA: String, other: String, error: Array<String?>): String?
+        private external fun concatViaJNI(ptrA: Long, keyExprA: String, other: String, out: Array<String?>): String?
     }
 
     fun close() {

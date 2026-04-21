@@ -80,8 +80,7 @@ class Publisher internal constructor(
     @Throws(ZError::class)
     fun put(payload: IntoZBytes) {
         val jni = jniPublisher ?: throw publisherNotValid
-        val error = arrayOfNulls<String>(1)
-        if (jni.put(payload.into().bytes, encoding.id, encoding.schema, null, error) < 0) throw ZError(error[0] ?: "Put failed")
+        jni.put(payload.into().bytes, encoding.id, encoding.schema, null)?.let { throw ZError(it) }
     }
 
     /** Performs a PUT operation on the specified [keyExpr] with the specified [payload]. */
@@ -89,8 +88,7 @@ class Publisher internal constructor(
     fun put(payload: IntoZBytes, options: PutOptions) {
         val jni = jniPublisher ?: throw publisherNotValid
         val enc = options.encoding ?: this.encoding
-        val error = arrayOfNulls<String>(1)
-        if (jni.put(payload.into().bytes, enc.id, enc.schema, options.attachment?.into()?.bytes, error) < 0) throw ZError(error[0] ?: "Put failed")
+        jni.put(payload.into().bytes, enc.id, enc.schema, options.attachment?.into()?.bytes)?.let { throw ZError(it) }
     }
 
     /** Performs a PUT operation on the specified [keyExpr] with the specified [payload]. */
@@ -108,8 +106,7 @@ class Publisher internal constructor(
     @Throws(ZError::class)
     fun delete(options: DeleteOptions = DeleteOptions()) {
         val jni = jniPublisher ?: throw publisherNotValid
-        val error = arrayOfNulls<String>(1)
-        if (jni.delete(options.attachment?.into()?.bytes, error) < 0) throw ZError(error[0] ?: "Delete failed")
+        jni.delete(options.attachment?.into()?.bytes)?.let { throw ZError(it) }
     }
 
     /**

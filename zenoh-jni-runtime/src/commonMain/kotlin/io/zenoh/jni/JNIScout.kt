@@ -35,10 +35,12 @@ public class JNIScout(private val ptr: Long) {
             callback: JNIScoutCallback,
             onClose: JNIOnCloseCallback,
             config: JNIConfig?,
-            error: Array<String?>
-        ): JNIScout? {
-            val ptr = scoutViaJNI(whatAmI, callback, onClose, config?.ptr ?: 0, error)
-            return if (ptr == 0L) null else JNIScout(ptr)
+            out: Array<JNIScout?>
+        ): String? {
+            val rawOut = LongArray(1)
+            val err = scoutViaJNI(whatAmI, callback, onClose, config?.ptr ?: 0, rawOut)
+            if (err == null) out[0] = JNIScout(rawOut[0])
+            return err
         }
 
         private external fun scoutViaJNI(
@@ -46,8 +48,8 @@ public class JNIScout(private val ptr: Long) {
             callback: JNIScoutCallback,
             onClose: JNIOnCloseCallback,
             configPtr: Long,
-            error: Array<String?>
-        ): Long
+            out: LongArray
+        ): String?
 
         private external fun freePtrViaJNI(ptr: Long)
     }

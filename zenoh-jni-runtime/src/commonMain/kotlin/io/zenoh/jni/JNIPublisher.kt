@@ -21,20 +21,20 @@ package io.zenoh.jni
  */
 public class JNIPublisher(private val ptr: Long) {
 
-    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?, error: Array<String?>): Int =
-        putViaJNI(ptr, payload, encodingId, encodingSchema, attachment, error)
+    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?): String? =
+        putViaJNI(ptr, payload, encodingId, encodingSchema, attachment)
 
-    fun delete(attachment: ByteArray?, error: Array<String?>): Int = deleteViaJNI(ptr, attachment, error)
+    fun delete(attachment: ByteArray?): String? = deleteViaJNI(ptr, attachment)
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
     private external fun putViaJNI(
-        ptr: Long, valuePayload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?, error: Array<String?>
-    ): Int
+        ptr: Long, valuePayload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?
+    ): String?
 
-    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?, error: Array<String?>): Int
+    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?): String?
 
     private external fun freePtrViaJNI(ptr: Long)
 }

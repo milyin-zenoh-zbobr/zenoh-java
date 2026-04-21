@@ -13,22 +13,33 @@
 //
 
 use jni::{
-    objects::{JClass, JObjectArray, JString},
-    sys::jint,
+    objects::{JClass, JString},
+    sys::jstring,
     JNIEnv,
 };
 
-use crate::errors::{set_error_string, ZResult};
+use crate::errors::{make_error_jstring, ZResult};
 use crate::zerror;
 
+/// Initializes Rust logging via JNI.
+///
+/// On Android, redirects to logcat. On other platforms, initialises env_logger
+/// writing to standard output.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `filter`: Log filter string (env_logger format, e.g. `"debug"`, `"zenoh=trace"`).
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNILogger_startLogsViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     filter: JString,
-    error_out: JObjectArray,
-) -> jint {
+) -> jstring {
     || -> ZResult<()> {
         let log_level = parse_filter(&mut env, filter)?;
         android_logd_logger::builder()
@@ -40,11 +51,8 @@ pub extern "C" fn Java_io_zenoh_jni_JNILogger_startLogsViaJNI(
         Ok(())
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 

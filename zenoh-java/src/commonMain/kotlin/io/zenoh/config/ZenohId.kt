@@ -25,8 +25,9 @@ data class ZenohId internal constructor(internal val bytes: ByteArray) {
 
     @Throws(ZError::class)
     override fun toString(): String {
-        val error = arrayOfNulls<String>(1)
-        return JNIZenohId.toString(bytes, error) ?: throw ZError(error[0] ?: "Unable to convert ZenohId to string.")
+        val out = arrayOfNulls<String>(1)
+        JNIZenohId.toString(bytes, out)?.let { throw ZError(it) }
+        return out[0]!!
     }
 
     override fun equals(other: Any?): Boolean {
