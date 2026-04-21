@@ -32,8 +32,7 @@ internal class Logger {
          */
         @Throws(ZError::class)
         fun start(filter: String) {
-            val error = arrayOfNulls<String>(1)
-            if (JNILogger.startLogs(filter, error) < 0) throw ZError(error[0] ?: "Failed to start logs")
+            JNILogger.startLogs(filter)?.let { throw ZError(it) }
         }
     }
 }

@@ -67,8 +67,7 @@ class Query internal constructor(
         val timestamp = options.timeStamp
         val timestampEnabled = timestamp != null
         val jni = jniQuery ?: throw ZError("Query is invalid")
-        val error = arrayOfNulls<String>(1)
-        val result = jni.replySuccess(
+        val err = jni.replySuccess(
             keyExpr.jniKeyExpr,
             keyExpr.keyExpr,
             zbytes.bytes,
@@ -78,10 +77,9 @@ class Query internal constructor(
             if (timestampEnabled) timestamp!!.ntpValue() else 0,
             options.attachment?.into()?.bytes,
             QoS(options.congestionControl, options.priority, options.express).express,
-            error
         )
         jniQuery = null
-        if (result < 0) throw ZError(error[0] ?: "Reply failed")
+        err?.let { throw ZError(it) }
     }
 
     /**
@@ -109,18 +107,16 @@ class Query internal constructor(
         val timestamp = options.timeStamp
         val timestampEnabled = timestamp != null
         val jni = jniQuery ?: throw ZError("Query is invalid")
-        val error = arrayOfNulls<String>(1)
-        val result = jni.replyDelete(
+        val err = jni.replyDelete(
             keyExpr.jniKeyExpr,
             keyExpr.keyExpr,
             timestampEnabled,
             if (timestampEnabled) timestamp!!.ntpValue() else 0,
             options.attachment?.into()?.bytes,
             QoS(options.congestionControl, options.priority, options.express).express,
-            error
         )
         jniQuery = null
-        if (result < 0) throw ZError(error[0] ?: "Reply delete failed")
+        err?.let { throw ZError(it) }
     }
 
     /**
@@ -134,10 +130,9 @@ class Query internal constructor(
     fun replyErr(message: IntoZBytes, options: ReplyErrOptions = ReplyErrOptions()) {
         val encoding = options.encoding
         val jni = jniQuery ?: throw ZError("Query is invalid")
-        val error = arrayOfNulls<String>(1)
-        val result = jni.replyError(message.into().bytes, encoding?.id ?: Encoding.defaultEncoding().id, encoding?.schema, error)
+        val err = jni.replyError(message.into().bytes, encoding?.id ?: Encoding.defaultEncoding().id, encoding?.schema)
         jniQuery = null
-        if (result < 0) throw ZError(error[0] ?: "Reply error failed")
+        err?.let { throw ZError(it) }
     }
 
     /**

@@ -15,8 +15,8 @@
 use std::{ops::Deref, ptr::null, sync::Arc, time::Duration};
 
 use jni::{
-    objects::{GlobalRef, JByteArray, JClass, JList, JObject, JObjectArray, JString, JValue},
-    sys::{jboolean, jbyteArray, jint, jlong, jobject},
+    objects::{GlobalRef, JByteArray, JClass, JList, JLongArray, JObject, JObjectArray, JString, JValue},
+    sys::{jboolean, jlong, jobject, jstring},
     JNIEnv,
 };
 use zenoh::{
@@ -29,7 +29,7 @@ use zenoh::{
     Wait,
 };
 
-use crate::errors::{set_error_string, ZResult};
+use crate::errors::{make_error_jstring, ZResult};
 use crate::owned_object::OwnedObject;
 use crate::sample_callback::SetJniSampleCallback;
 #[cfg(feature = "zenoh-ext")]
@@ -45,23 +45,44 @@ use crate::{
     key_expr::process_kotlin_key_expr, utils::*, zerror,
 };
 
+/// Opens a Zenoh session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `config_ptr`: Raw pointer to the Config to use for opening the session.
+/// - `out`: Single-element `long[]`; receives the raw session pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `config_ptr` must be a valid pointer to a Config. Ownership is not transferred.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_openSessionViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     config_ptr: *const Config,
-    error_out: JObjectArray,
-) -> *const Session {
-    let session = open_session(config_ptr);
-    match session {
-        Ok(session) => Arc::into_raw(Arc::new(session)),
-        Err(err) => {
+    out: JLongArray,
+) -> jstring {
+    || -> ZResult<()> {
+        let session = open_session(config_ptr)?;
+        let ptr = Arc::into_raw(Arc::new(session));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
+    }()
+    .map_or_else(
+        |err| {
             tracing::error!("Unable to open session: {}", err);
-            set_error_string(&mut env, &error_out, &err.to_string());
-            null()
-        }
-    }
+            make_error_jstring(&mut env, &err.to_string())
+        },
+        |_| std::ptr::null_mut(),
+    )
 }
 
 unsafe fn open_session(config_ptr: *const Config) -> ZResult<Session> {
@@ -69,65 +90,6 @@ unsafe fn open_session(config_ptr: *const Config) -> ZResult<Session> {
     zenoh::open((*config).clone())
         .wait()
         .map_err(|err: zenoh::Error| zerror!(err))
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub extern "C" fn Java_io_zenoh_jni_JNISession_openSessionWithJsonConfigViaJNI(
-    mut env: JNIEnv,
-    _class: JClass,
-    json_config: JString,
-    error_out: JObjectArray,
-) -> *const Session {
-    let session = open_session_with_json_config(&mut env, json_config);
-    match session {
-        Ok(session) => Arc::into_raw(Arc::new(session)),
-        Err(err) => {
-            tracing::error!("Unable to open session: {}", err);
-            set_error_string(&mut env, &error_out, &err.to_string());
-            null()
-        }
-    }
-}
-
-fn open_session_with_json_config(env: &mut JNIEnv, json_config: JString) -> ZResult<Session> {
-    let json_config = decode_string(env, &json_config)?;
-    let mut deserializer =
-        json5::Deserializer::from_str(&json_config).map_err(|err| zerror!(err))?;
-    let config = Config::from_deserializer(&mut deserializer).map_err(|err| match err {
-        Ok(c) => zerror!("Invalid configuration: {}", c),
-        Err(e) => zerror!("JSON error: {}", e),
-    })?;
-    zenoh::open(config).wait().map_err(|err| zerror!(err))
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub extern "C" fn Java_io_zenoh_jni_JNISession_openSessionWithYamlConfigViaJNI(
-    mut env: JNIEnv,
-    _class: JClass,
-    yaml_config: JString,
-    error_out: JObjectArray,
-) -> *const Session {
-    let session = open_session_with_yaml_config(&mut env, yaml_config);
-    match session {
-        Ok(session) => Arc::into_raw(Arc::new(session)),
-        Err(err) => {
-            tracing::error!("Unable to open session: {}", err);
-            set_error_string(&mut env, &error_out, &err.to_string());
-            null()
-        }
-    }
-}
-
-fn open_session_with_yaml_config(env: &mut JNIEnv, yaml_config: JString) -> ZResult<Session> {
-    let yaml_config = decode_string(env, &yaml_config)?;
-    let deserializer = serde_yaml::Deserializer::from_str(&yaml_config);
-    let config = Config::from_deserializer(deserializer).map_err(|err| match err {
-        Ok(c) => zerror!("Invalid configuration: {}", c),
-        Err(e) => zerror!("YAML error: {}", e),
-    })?;
-    zenoh::open(config).wait().map_err(|err| zerror!(err))
 }
 
 #[no_mangle]
@@ -140,6 +102,26 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_closeSessionViaJNI(
     Arc::from_raw(session_ptr);
 }
 
+/// Declares a publisher on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `key_expr_ptr`: Nullable pointer to a declared KeyExpr.
+/// - `key_expr_str`: String representation of the key expression.
+/// - `congestion_control`: Congestion control ordinal.
+/// - `priority`: Priority ordinal.
+/// - `is_express`: Whether to use express mode.
+/// - `reliability`: Reliability ordinal.
+/// - `out`: Single-element `long[]`; receives the raw publisher pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declarePublisherViaJNI(
@@ -148,36 +130,52 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declarePublisherViaJNI(
     session_ptr: *const Session,
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
-    congestion_control: jint,
-    priority: jint,
+    congestion_control: jni::sys::jint,
+    priority: jni::sys::jint,
     is_express: jboolean,
-    reliability: jint,
-    error_out: JObjectArray,
-) -> *const Publisher<'static> {
+    reliability: jni::sys::jint,
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    || -> ZResult<*const Publisher<'static>> {
+    || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         let congestion_control = decode_congestion_control(congestion_control)?;
         let priority = decode_priority(priority)?;
         let reliability = decode_reliability(reliability)?;
-        let result = session
+        let publisher = session
             .declare_publisher(key_expr)
             .congestion_control(congestion_control)
             .priority(priority)
             .express(is_express != 0)
             .reliability(reliability)
-            .wait();
-        match result {
-            Ok(publisher) => Ok(Arc::into_raw(Arc::new(publisher))),
-            Err(err) => Err(zerror!(err)),
-        }
+            .wait()
+            .map_err(|err| zerror!(err))?;
+        let ptr = Arc::into_raw(Arc::new(publisher));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Performs a PUT operation on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - (other parameters): Key expression, payload, encoding, QoS settings, attachment.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_putViaJNI(
@@ -187,15 +185,14 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_putViaJNI(
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
     payload: JByteArray,
-    encoding_id: jint,
+    encoding_id: jni::sys::jint,
     encoding_schema: JString,
-    congestion_control: jint,
-    priority: jint,
+    congestion_control: jni::sys::jint,
+    priority: jni::sys::jint,
     is_express: jboolean,
     attachment: JByteArray,
-    reliability: jint,
-    error_out: JObjectArray,
-) -> jint {
+    reliability: jni::sys::jint,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
     || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
@@ -224,14 +221,24 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_putViaJNI(
             .map_err(|err| zerror!(err))
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 
+/// Performs a DELETE operation on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - (other parameters): Key expression, QoS settings, attachment.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_deleteViaJNI(
@@ -240,13 +247,12 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_deleteViaJNI(
     session_ptr: *const Session,
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
-    congestion_control: jint,
-    priority: jint,
+    congestion_control: jni::sys::jint,
+    priority: jni::sys::jint,
     is_express: jboolean,
     attachment: JByteArray,
-    reliability: jint,
-    error_out: JObjectArray,
-) -> jint {
+    reliability: jni::sys::jint,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
     || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
@@ -272,14 +278,29 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_deleteViaJNI(
             .map_err(|err| zerror!(err))
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 
+/// Declares a subscriber on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `key_expr_ptr`: Nullable pointer to a declared KeyExpr.
+/// - `key_expr_str`: String representation of the key expression.
+/// - `callback`: The `JNISubscriberCallback` instance.
+/// - `on_close`: The `JNIOnCloseCallback` instance.
+/// - `out`: Single-element `long[]`; receives the raw subscriber pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareSubscriberViaJNI(
@@ -290,10 +311,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareSubscriberViaJNI(
     key_expr_str: JString,
     callback: JObject,
     on_close: JObject,
-    error_out: JObjectArray,
-) -> *const Subscriber<()> {
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    || -> ZResult<*const Subscriber<()>> {
+    || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         tracing::debug!("Declaring subscriber on '{}'...", key_expr);
 
@@ -304,14 +325,36 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareSubscriberViaJNI(
             .map_err(|err| zerror!("Unable to declare subscriber: {}", err))?;
 
         tracing::debug!("Subscriber declared on '{}'.", key_expr);
-        Ok(Arc::into_raw(Arc::new(subscriber)))
+        let ptr = Arc::into_raw(Arc::new(subscriber));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Declares a querier on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `key_expr_ptr`: Nullable pointer to a declared KeyExpr.
+/// - `key_expr_str`: String representation of the key expression.
+/// - (other parameters): Query target, consolidation, QoS, timeout, accept_replies.
+/// - `out`: Single-element `long[]`; receives the raw querier pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareQuerierViaJNI(
@@ -320,17 +363,17 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareQuerierViaJNI(
     session_ptr: *const Session,
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
-    target: jint,
-    consolidation: jint,
-    congestion_control: jint,
-    priority: jint,
+    target: jni::sys::jint,
+    consolidation: jni::sys::jint,
+    congestion_control: jni::sys::jint,
+    priority: jni::sys::jint,
     is_express: jboolean,
     timeout_ms: jlong,
-    accept_replies: jint,
-    error_out: JObjectArray,
-) -> *const Querier<'static> {
+    accept_replies: jni::sys::jint,
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    || -> ZResult<*const Querier<'static>> {
+    || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         let query_target = decode_query_target(target)?;
         let consolidation = decode_consolidation(consolidation)?;
@@ -353,14 +396,38 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareQuerierViaJNI(
             .map_err(|err| zerror!(err))?;
 
         tracing::debug!("Querier declared on '{}'.", key_expr);
-        Ok(Arc::into_raw(Arc::new(querier)))
+        let ptr = Arc::into_raw(Arc::new(querier));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Declares a queryable on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `key_expr_ptr`: Nullable pointer to a declared KeyExpr.
+/// - `key_expr_str`: String representation of the key expression.
+/// - `callback`: The `JNIQueryableCallback` instance.
+/// - `on_close`: The `JNIOnCloseCallback` instance.
+/// - `complete`: Whether the queryable is complete.
+/// - `out`: Single-element `long[]`; receives the raw queryable pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareQueryableViaJNI(
@@ -372,10 +439,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareQueryableViaJNI(
     callback: JObject,
     on_close: JObject,
     complete: jboolean,
-    error_out: JObjectArray,
-) -> *const Queryable<()> {
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    || -> ZResult<*const Queryable<()>> {
+    || -> ZResult<()> {
         let java_vm = Arc::new(get_java_vm(&mut env)?);
         let callback_global_ref = get_callback_global_ref(&mut env, callback)?;
         let on_close_global_ref = get_callback_global_ref(&mut env, on_close)?;
@@ -406,12 +473,17 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareQueryableViaJNI(
         let queryable = builder
             .wait()
             .map_err(|err| zerror!("Error declaring queryable: {}", err))?;
-        Ok(Arc::into_raw(Arc::new(queryable)))
+        let ptr = Arc::into_raw(Arc::new(queryable));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 fn on_query(mut env: JNIEnv, query: Query, callback_global_ref: &GlobalRef) -> ZResult<()> {
@@ -427,7 +499,7 @@ fn on_query(mut env: JNIEnv, query: Query, callback_global_ref: &GlobalRef) -> Z
 
     let (payload, encoding_id, encoding_schema) = if let Some(payload) = query.payload() {
         let encoding = query.encoding().unwrap(); //If there is payload, there is encoding.
-        let encoding_id = encoding.id() as jint;
+        let encoding_id = encoding.id() as jni::sys::jint;
         let encoding_schema = encoding
             .schema()
             .map_or_else(
@@ -464,7 +536,7 @@ fn on_query(mut env: JNIEnv, query: Query, callback_global_ref: &GlobalRef) -> Z
             )
         })?;
 
-    let accepts_replies: jint = match query.accepts_replies() {
+    let accepts_replies: jni::sys::jint = match query.accepts_replies() {
         ReplyKeyExpr::MatchingQuery => 0,
         ReplyKeyExpr::Any => 1,
     };
@@ -498,6 +570,21 @@ fn on_query(mut env: JNIEnv, query: Query, callback_global_ref: &GlobalRef) -> Z
     result
 }
 
+/// Declares a key expression on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `key_expr_str`: The key expression string to declare.
+/// - `out`: Single-element `long[]`; receives the raw key expression pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` must be a valid pointer.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareKeyExprViaJNI(
@@ -505,10 +592,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareKeyExprViaJNI(
     _class: JClass,
     session_ptr: *const Session,
     key_expr_str: JString,
-    error_out: JObjectArray,
-) -> *const KeyExpr<'static> {
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    || -> ZResult<*const KeyExpr<'static>> {
+    || -> ZResult<()> {
         let key_expr_str = decode_string(&mut env, &key_expr_str)?;
         let key_expr = session
             .declare_keyexpr(key_expr_str.to_owned())
@@ -520,12 +607,17 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareKeyExprViaJNI(
                     err
                 )
             })?;
-        Ok(Arc::into_raw(Arc::new(key_expr)))
+        let ptr = Arc::into_raw(Arc::new(key_expr));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 #[no_mangle]
@@ -545,6 +637,20 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_undeclareKeyExprViaJNI(
     // `key_expr` is intentionally left to be freed by Rust
 }
 
+/// Performs a GET query on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - (other parameters): Key expression, selector params, callback, timeout, target,
+///   consolidation, attachment, payload, encoding, QoS, accept_replies.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_getViaJNI(
@@ -557,18 +663,17 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_getViaJNI(
     callback: JObject,
     on_close: JObject,
     timeout_ms: jlong,
-    target: jint,
-    consolidation: jint,
+    target: jni::sys::jint,
+    consolidation: jni::sys::jint,
     attachment: /*nullable*/ JByteArray,
     payload: /*nullable*/ JByteArray,
-    encoding_id: jint,
+    encoding_id: jni::sys::jint,
     encoding_schema: /*nullable*/ JString,
-    congestion_control: jint,
-    priority: jint,
+    congestion_control: jni::sys::jint,
+    priority: jni::sys::jint,
     is_express: jboolean,
-    accept_replies: jint,
-    error_out: JObjectArray,
-) -> jint {
+    accept_replies: jni::sys::jint,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
     || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
@@ -636,15 +741,12 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_getViaJNI(
 
         get_builder
             .wait()
-            .map(|_| tracing::trace!("Performing get on '{key_expr}'.",))
+            .map(|_| tracing::trace!("Performing get on '{key_expr}'."))
             .map_err(|err| zerror!(err))
     }()
     .map_or_else(
-        |err| {
-            set_error_string(&mut env, &error_out, &err.to_string());
-            -1
-        },
-        |_| 0,
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
     )
 }
 
@@ -663,11 +765,11 @@ pub(crate) fn on_reply_success(
             },
         )
         .map(|value| env.auto_local(value))?;
-    let eid = replier_id.map_or_else(|| 0, |replier_id| replier_id.eid() as jint);
+    let eid = replier_id.map_or_else(|| 0, |replier_id| replier_id.eid() as jni::sys::jint);
 
     let byte_array =
         bytes_to_java_array(env, sample.payload()).map(|value| env.auto_local(value))?;
-    let encoding: jint = sample.encoding().id() as jint;
+    let encoding: jni::sys::jint = sample.encoding().id() as jni::sys::jint;
     let encoding_schema = sample
         .encoding()
         .schema()
@@ -676,7 +778,7 @@ pub(crate) fn on_reply_success(
             |schema| slice_to_java_string(env, schema),
         )
         .map(|value| env.auto_local(value))?;
-    let kind = sample.kind() as jint;
+    let kind = sample.kind() as jni::sys::jint;
 
     let (timestamp, is_valid) = sample
         .timestamp()
@@ -703,8 +805,8 @@ pub(crate) fn on_reply_success(
         })?;
 
     let express = sample.express();
-    let priority = sample.priority() as jint;
-    let cc = sample.congestion_control() as jint;
+    let priority = sample.priority() as jni::sys::jint;
+    let cc = sample.congestion_control() as jni::sys::jint;
 
     let result = match env.call_method(
         callback_global_ref,
@@ -751,11 +853,11 @@ pub(crate) fn on_reply_error(
             },
         )
         .map(|value| env.auto_local(value))?;
-    let eid = replier_id.map_or_else(|| 0, |replier_id| replier_id.eid() as jint);
+    let eid = replier_id.map_or_else(|| 0, |replier_id| replier_id.eid() as jni::sys::jint);
 
     let payload =
         bytes_to_java_array(env, reply_error.payload()).map(|value| env.auto_local(value))?;
-    let encoding_id: jint = reply_error.encoding().id() as jint;
+    let encoding_id: jni::sys::jint = reply_error.encoding().id() as jni::sys::jint;
     let encoding_schema = reply_error
         .encoding()
         .schema()
@@ -777,13 +879,13 @@ pub(crate) fn on_reply_error(
             JValue::from(encoding_id),
             JValue::from(&encoding_schema),
             // The remaining parameters aren't used in case of replying error, so we set them to default.
-            JValue::from(0 as jint),
+            JValue::from(0 as jni::sys::jint),
             JValue::from(0_i64),
             JValue::from(false),
             JValue::from(&JByteArray::default()),
             JValue::from(false),
-            JValue::from(0 as jint),
-            JValue::from(0 as jint),
+            JValue::from(0 as jni::sys::jint),
+            JValue::from(0 as jni::sys::jint),
         ],
     ) {
         Ok(_) => Ok(()),
@@ -795,65 +897,115 @@ pub(crate) fn on_reply_error(
     result
 }
 
+/// Returns the peers' Zenoh IDs via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `out`: Single-element `Object[]`; receives the `List<byte[]>` of peer IDs on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` must be a valid pointer.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_getPeersZidViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     session_ptr: *const Session,
-    error_out: JObjectArray,
-) -> jobject {
+    out: JObjectArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    {
+    || -> ZResult<()> {
         let peers_zid = session.info().peers_zid().wait();
         let ids = peers_zid.collect::<Vec<ZenohId>>();
-        ids_to_java_list(&mut env, ids).map_err(|err| zerror!(err))
-    }
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        JObject::default().as_raw()
-    })
+        let list_obj = ids_to_java_list(&mut env, ids).map_err(|err| zerror!(err))?;
+        let list_jobj = unsafe { JObject::from_raw(list_obj) };
+        env.set_object_array_element(&out, 0, &list_jobj)
+            .map_err(|err| zerror!(err))
+    }()
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Returns the routers' Zenoh IDs via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `out`: Single-element `Object[]`; receives the `List<byte[]>` of router IDs on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` must be a valid pointer.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_getRoutersZidViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     session_ptr: *const Session,
-    error_out: JObjectArray,
-) -> jobject {
+    out: JObjectArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    {
-        let peers_zid = session.info().routers_zid().wait();
-        let ids = peers_zid.collect::<Vec<ZenohId>>();
-        ids_to_java_list(&mut env, ids).map_err(|err| zerror!(err))
-    }
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        JObject::default().as_raw()
-    })
+    || -> ZResult<()> {
+        let routers_zid = session.info().routers_zid().wait();
+        let ids = routers_zid.collect::<Vec<ZenohId>>();
+        let list_obj = ids_to_java_list(&mut env, ids).map_err(|err| zerror!(err))?;
+        let list_jobj = unsafe { JObject::from_raw(list_obj) };
+        env.set_object_array_element(&out, 0, &list_jobj)
+            .map_err(|err| zerror!(err))
+    }()
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Returns the session's own Zenoh ID as a byte array via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `out`: Single-element `Object[]`; receives the `byte[]` ID on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` must be a valid pointer.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_getZidViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     session_ptr: *const Session,
-    error_out: JObjectArray,
-) -> jbyteArray {
+    out: JObjectArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    {
+    || -> ZResult<()> {
         let zid = session.info().zid().wait();
-        env.byte_array_from_slice(&zid.to_le_bytes())
-            .map(|x| x.as_raw())
+        let byte_array = env
+            .byte_array_from_slice(&zid.to_le_bytes())
+            .map_err(|err| zerror!(err))?;
+        env.set_object_array_element(&out, 0, &byte_array)
             .map_err(|err| zerror!(err))
-    }
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        JByteArray::default().as_raw()
-    })
+    }()
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 fn ids_to_java_list(env: &mut JNIEnv, ids: Vec<ZenohId>) -> jni::errors::Result<jobject> {
@@ -866,6 +1018,25 @@ fn ids_to_java_list(env: &mut JNIEnv, ids: Vec<ZenohId>) -> jni::errors::Result<
     Ok(array_list.as_raw())
 }
 
+/// Declares an advanced subscriber on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `key_expr_ptr`: Nullable pointer to a declared KeyExpr.
+/// - `key_expr_str`: String representation of the key expression.
+/// - (history, recovery, subscriber_detection parameters): Configuration for the advanced subscriber.
+/// - `callback`: The `JNISubscriberCallback` instance.
+/// - `on_close`: The `JNIOnCloseCallback` instance.
+/// - `out`: Single-element `long[]`; receives the raw advanced subscriber pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -889,10 +1060,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareAdvancedSubscriberV
 
     callback: JObject,
     on_close: JObject,
-    error_out: JObjectArray,
-) -> *const AdvancedSubscriber<()> {
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    || -> ZResult<*const AdvancedSubscriber<()>> {
+    || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         tracing::debug!("Declaring advanced subscriber on '{}'...", key_expr);
         let mut builder = session
@@ -940,17 +1111,39 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareAdvancedSubscriberV
             builder = builder.subscriber_detection();
         }
 
-        builder
+        let subscriber = builder
             .wait()
-            .map(|s| Arc::into_raw(Arc::new(s)))
-            .map_err(|err| zerror!("Unable to declare advanced subscriber: {}", err))
+            .map_err(|err| zerror!("Unable to declare advanced subscriber: {}", err))?;
+        let ptr = Arc::into_raw(Arc::new(subscriber));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Declares an advanced publisher on the session via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the Session.
+/// - `key_expr_ptr`: Nullable pointer to a declared KeyExpr.
+/// - `key_expr_str`: String representation of the key expression.
+/// - (QoS, cache, miss detection, publisher detection parameters): Advanced publisher config.
+/// - `out`: Single-element `long[]`; receives the raw advanced publisher pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid pointers.
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -960,15 +1153,15 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareAdvancedPublisherVi
     session_ptr: *const Session,
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
-    congestion_control: jint,
-    priority: jint,
+    congestion_control: jni::sys::jint,
+    priority: jni::sys::jint,
     is_express: jboolean,
-    reliability: jint,
+    reliability: jni::sys::jint,
     // CacheConfig
     cache_enabled: jboolean,
     cache_max_samples: jlong,
-    cache_replies_priority: jint,
-    cache_replies_congestion_control: jint,
+    cache_replies_priority: jni::sys::jint,
+    cache_replies_congestion_control: jni::sys::jint,
     cache_replies_is_express: jboolean,
     // MissDetectionConfig
     sample_miss_detection_enabled: jboolean,
@@ -977,10 +1170,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareAdvancedPublisherVi
     sample_miss_detection_heartbeat_is_sporadic: jboolean,
 
     publisher_detection: jboolean,
-    error_out: JObjectArray,
-) -> *const AdvancedPublisher<'static> {
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    let publisher_ptr = || -> ZResult<*const AdvancedPublisher<'static>> {
+    || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         let congestion_control = decode_congestion_control(congestion_control)?;
         let priority = decode_priority(priority)?;
@@ -1041,15 +1234,16 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareAdvancedPublisherVi
             builder = builder.publisher_detection();
         }
 
-        let result = builder.wait();
-        match result {
-            Ok(publisher) => Ok(Arc::into_raw(Arc::new(publisher))),
-            Err(err) => Err(zerror!(err)),
-        }
+        let publisher = builder.wait().map_err(|err| zerror!(err))?;
+        let ptr = Arc::into_raw(Arc::new(publisher));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        set_error_string(&mut env, &error_out, &err.to_string());
-        null()
-    });
-    publisher_ptr
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }

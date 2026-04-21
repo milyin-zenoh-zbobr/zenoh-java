@@ -171,8 +171,7 @@ class Querier internal constructor(val keyExpr: KeyExpr, val qos: QoS, private v
             }
             callback.run(reply)
         }
-        val error = arrayOfNulls<String>(1)
-        val result = jni.get(
+        val err = jni.get(
             keyExpr.jniKeyExpr,
             keyExpr.keyExpr,
             options.parameters?.toString(),
@@ -182,9 +181,8 @@ class Querier internal constructor(val keyExpr: KeyExpr, val qos: QoS, private v
             options.payload?.into()?.bytes,
             options.encoding?.id ?: Encoding.defaultEncoding().id,
             options.encoding?.schema,
-            error
         )
-        if (result < 0) throw ZError(error[0] ?: "Get failed")
+        err?.let { throw ZError(it) }
     }
 
     private fun <R> resolveGetWithHandler(keyExpr: KeyExpr, handler: Handler<Reply, R>, options: GetOptions): R {
@@ -209,8 +207,7 @@ class Querier internal constructor(val keyExpr: KeyExpr, val qos: QoS, private v
             }
             handler.handle(reply)
         }
-        val error = arrayOfNulls<String>(1)
-        val result = jni.get(
+        val err = jni.get(
             keyExpr.jniKeyExpr,
             keyExpr.keyExpr,
             options.parameters?.toString(),
@@ -220,9 +217,8 @@ class Querier internal constructor(val keyExpr: KeyExpr, val qos: QoS, private v
             options.payload?.into()?.bytes,
             options.encoding?.id ?: Encoding.defaultEncoding().id,
             options.encoding?.schema,
-            error
         )
-        if (result < 0) throw ZError(error[0] ?: "Get failed")
+        err?.let { throw ZError(it) }
         return handler.receiver()
     }
 }

@@ -28,7 +28,7 @@ public object JNILogger {
      *
      * See https://docs.rs/env_logger/latest/env_logger/index.html for accepted filter format.
      */
-    fun startLogs(filter: String, error: Array<String?>): Int = startLogsViaJNI(filter, error)
+    fun startLogs(filter: String): String? = startLogsViaJNI(filter)
 
-    private external fun startLogsViaJNI(filter: String, error: Array<String?>): Int
+    private external fun startLogsViaJNI(filter: String): String?
 }

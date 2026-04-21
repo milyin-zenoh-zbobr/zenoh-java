@@ -30,8 +30,7 @@ public class JNIQuerier(private val ptr: Long) {
         payload: ByteArray?,
         encodingId: Int,
         encodingSchema: String?,
-        error: Array<String?>
-    ): Int = getViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, parameters, callback, onClose, attachmentBytes, payload, encodingId, encodingSchema, error)
+    ): String? = getViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, parameters, callback, onClose, attachmentBytes, payload, encodingId, encodingSchema)
 
     private external fun getViaJNI(
         querierPtr: Long,
@@ -44,8 +43,7 @@ public class JNIQuerier(private val ptr: Long) {
         payload: ByteArray?,
         encodingId: Int,
         encodingSchema: String?,
-        error: Array<String?>
-    ): Int
+    ): String?
 
     private external fun freePtrViaJNI(ptr: Long)
 

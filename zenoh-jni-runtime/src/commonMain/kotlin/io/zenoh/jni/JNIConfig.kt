@@ -25,46 +25,54 @@ public class JNIConfig(internal val ptr: Long) {
             ZenohLoad
         }
 
-        fun loadDefault(error: Array<String?>): JNIConfig? {
-            val ptr = loadDefaultConfigViaJNI(error)
-            return if (ptr == 0L) null else JNIConfig(ptr)
+        fun loadDefault(out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadDefaultConfigViaJNI(rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
         }
 
-        fun loadFromFile(path: String, error: Array<String?>): JNIConfig? {
-            val ptr = loadConfigFileViaJNI(path, error)
-            return if (ptr == 0L) null else JNIConfig(ptr)
+        fun loadFromFile(path: String, out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadConfigFileViaJNI(path, rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
         }
 
-        fun loadFromJson(rawConfig: String, error: Array<String?>): JNIConfig? {
-            val ptr = loadJsonConfigViaJNI(rawConfig, error)
-            return if (ptr == 0L) null else JNIConfig(ptr)
+        fun loadFromJson(rawConfig: String, out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadJsonConfigViaJNI(rawConfig, rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
         }
 
-        fun loadFromYaml(rawConfig: String, error: Array<String?>): JNIConfig? {
-            val ptr = loadYamlConfigViaJNI(rawConfig, error)
-            return if (ptr == 0L) null else JNIConfig(ptr)
+        fun loadFromYaml(rawConfig: String, out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadYamlConfigViaJNI(rawConfig, rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
         }
 
-        private external fun loadDefaultConfigViaJNI(error: Array<String?>): Long
+        private external fun loadDefaultConfigViaJNI(out: LongArray): String?
 
-        private external fun loadConfigFileViaJNI(path: String, error: Array<String?>): Long
+        private external fun loadConfigFileViaJNI(path: String, out: LongArray): String?
 
-        private external fun loadJsonConfigViaJNI(rawConfig: String, error: Array<String?>): Long
+        private external fun loadJsonConfigViaJNI(rawConfig: String, out: LongArray): String?
 
-        private external fun loadYamlConfigViaJNI(rawConfig: String, error: Array<String?>): Long
+        private external fun loadYamlConfigViaJNI(rawConfig: String, out: LongArray): String?
 
-        private external fun insertJson5ViaJNI(ptr: Long, key: String, value: String, error: Array<String?>): Int
+        private external fun insertJson5ViaJNI(ptr: Long, key: String, value: String): String?
 
         private external fun freePtrViaJNI(ptr: Long)
 
-        private external fun getJsonViaJNI(ptr: Long, key: String, error: Array<String?>): String?
+        private external fun getJsonViaJNI(ptr: Long, key: String, out: Array<String?>): String?
     }
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
-    fun getJson(key: String, error: Array<String?>): String? = getJsonViaJNI(ptr, key, error)
+    fun getJson(key: String, out: Array<String?>): String? = getJsonViaJNI(ptr, key, out)
 
-    fun insertJson5(key: String, value: String, error: Array<String?>): Int = insertJson5ViaJNI(ptr, key, value, error)
+    fun insertJson5(key: String, value: String): String? = insertJson5ViaJNI(ptr, key, value)
 }
