@@ -14,14 +14,12 @@
 
 package io.zenoh.jni
 
-import io.zenoh.exceptions.ZError
 import io.zenoh.jni.callbacks.JNIGetCallback
 import io.zenoh.jni.callbacks.JNIOnCloseCallback
 
 /** Adapter class for a native Zenoh querier. */
 public class JNIQuerier(private val ptr: Long) {
 
-    @Throws(ZError::class)
     fun get(
         jniKeyExpr: JNIKeyExpr?,
         keyExprString: String,
@@ -32,11 +30,8 @@ public class JNIQuerier(private val ptr: Long) {
         payload: ByteArray?,
         encodingId: Int,
         encodingSchema: String?,
-    ) {
-        getViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, parameters, callback, onClose, attachmentBytes, payload, encodingId, encodingSchema)
-    }
+    ): String? = getViaJNI(ptr, jniKeyExpr?.ptr ?: 0, keyExprString, parameters, callback, onClose, attachmentBytes, payload, encodingId, encodingSchema)
 
-    @Throws(ZError::class)
     private external fun getViaJNI(
         querierPtr: Long,
         keyExprPtr: Long,
@@ -48,7 +43,7 @@ public class JNIQuerier(private val ptr: Long) {
         payload: ByteArray?,
         encodingId: Int,
         encodingSchema: String?,
-    )
+    ): String?
 
     private external fun freePtrViaJNI(ptr: Long)
 

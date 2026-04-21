@@ -14,7 +14,6 @@
 
 package io.zenoh.jni
 
-import io.zenoh.exceptions.ZError
 import io.zenoh.jni.callbacks.JNIMatchingListenerCallback
 import io.zenoh.jni.callbacks.JNIOnCloseCallback
 
@@ -25,51 +24,42 @@ import io.zenoh.jni.callbacks.JNIOnCloseCallback
  */
 public class JNIAdvancedPublisher(private val ptr: Long) {
 
-    @Throws(ZError::class)
-    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?) {
+    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?): String? =
         putViaJNI(ptr, payload, encodingId, encodingSchema, attachment)
+
+    fun delete(attachment: ByteArray?): String? = deleteViaJNI(ptr, attachment)
+
+    fun declareMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, out: Array<JNIMatchingListener?>): String? {
+        val rawOut = LongArray(1)
+        val err = declareMatchingListenerViaJNI(ptr, callback, onClose, rawOut)
+        if (err == null) out[0] = JNIMatchingListener(rawOut[0])
+        return err
     }
 
-    @Throws(ZError::class)
-    fun delete(attachment: ByteArray?) {
-        deleteViaJNI(ptr, attachment)
-    }
-
-    @Throws(ZError::class)
-    fun declareMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback): JNIMatchingListener =
-        JNIMatchingListener(declareMatchingListenerViaJNI(ptr, callback, onClose))
-
-    @Throws(ZError::class)
-    fun declareBackgroundMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback) =
+    fun declareBackgroundMatchingListener(callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback): String? =
         declareBackgroundMatchingListenerViaJNI(ptr, callback, onClose)
 
-    @Throws(ZError::class)
-    fun getMatchingStatus(): Boolean = getMatchingStatusViaJNI(ptr)
+    fun getMatchingStatus(out: IntArray): String? = getMatchingStatusViaJNI(ptr, out)
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
-    @Throws(ZError::class)
     private external fun putViaJNI(
         ptr: Long, payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?
-    )
+    ): String?
 
-    @Throws(ZError::class)
-    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?)
+    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?): String?
 
-    @Throws(ZError::class)
     private external fun declareMatchingListenerViaJNI(
-        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback
-    ): Long
+        ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback, out: LongArray
+    ): String?
 
-    @Throws(ZError::class)
     private external fun declareBackgroundMatchingListenerViaJNI(
         ptr: Long, callback: JNIMatchingListenerCallback, onClose: JNIOnCloseCallback
-    )
+    ): String?
 
-    @Throws(ZError::class)
-    private external fun getMatchingStatusViaJNI(ptr: Long): Boolean
+    private external fun getMatchingStatusViaJNI(ptr: Long, out: IntArray): String?
 
     private external fun freePtrViaJNI(ptr: Long)
 }

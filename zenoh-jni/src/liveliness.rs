@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{ptr::null, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use jni::{
-    objects::{JClass, JObject, JString},
-    sys::{jboolean, jlong},
+    objects::{JClass, JLongArray, JObject, JObjectArray, JString},
+    sys::{jboolean, jlong, jstring},
     JNIEnv,
 };
 
@@ -26,19 +26,35 @@ use zenoh::{
 };
 
 use crate::{
-    errors::ZResult,
+    errors::{make_error_jstring, ZResult},
     key_expr::process_kotlin_key_expr,
     owned_object::OwnedObject,
     sample_callback::SetJniSampleCallback,
     session::{on_reply_error, on_reply_success},
-    throw_exception,
     utils::{get_callback_global_ref, get_java_vm, load_on_close},
     zerror,
 };
 
+/// Performs a GET operation on the liveliness space via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the [Session].
+/// - `key_expr_ptr`: Nullable pointer to a declared [KeyExpr].
+/// - `key_expr_str`: String representation of the key expression.
+/// - `callback`: Callback invoked for each reply.
+/// - `timeout_ms`: Query timeout in milliseconds.
+/// - `on_close`: Callback invoked when the query completes.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn Java_io_zenoh_jni_JNISession_livelinessGetViaJNI(
+pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_livelinessGetViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     session_ptr: *const Session,
@@ -47,10 +63,10 @@ pub extern "C" fn Java_io_zenoh_jni_JNISession_livelinessGetViaJNI(
     callback: JObject,
     timeout_ms: jlong,
     on_close: JObject,
-) {
-    let session = unsafe { OwnedObject::from_raw(session_ptr) };
-    let _ = || -> ZResult<()> {
-        let key_expr = unsafe { process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr) }?;
+) -> jstring {
+    let session = OwnedObject::from_raw(session_ptr);
+    || -> ZResult<()> {
+        let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         let java_vm = Arc::new(get_java_vm(&mut env)?);
         let callback_global_ref = get_callback_global_ref(&mut env, callback)?;
         let on_close_global_ref = get_callback_global_ref(&mut env, on_close)?;
@@ -94,35 +110,58 @@ pub extern "C" fn Java_io_zenoh_jni_JNISession_livelinessGetViaJNI(
         });
         Ok(())
     }()
-    .map_err(|err| {
-        throw_exception!(env, err);
-    });
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
+/// Declares a liveliness token via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the [Session].
+/// - `key_expr_ptr`: Nullable pointer to a declared [KeyExpr].
+/// - `key_expr_str`: String representation of the key expression.
+/// - `out`: Single-element `long[]`; receives the raw token pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessTokenViaJNI(
+pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessTokenViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     session_ptr: *const Session,
     key_expr_ptr: /*nullable*/ *const KeyExpr<'static>,
     key_expr_str: JString,
-) -> *const LivelinessToken {
-    let session = unsafe { OwnedObject::from_raw(session_ptr) };
-    || -> ZResult<*const LivelinessToken> {
-        let key_expr = unsafe { process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr) }?;
+    out: JLongArray,
+) -> jstring {
+    let session = OwnedObject::from_raw(session_ptr);
+    || -> ZResult<()> {
+        let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         tracing::trace!("Declaring liveliness token on '{key_expr}'.");
         let token = session
             .liveliness()
             .declare_token(key_expr)
             .wait()
             .map_err(|err| zerror!(err))?;
-        Ok(Arc::into_raw(Arc::new(token)))
+        let ptr = Arc::into_raw(Arc::new(token));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 #[no_mangle]
@@ -135,6 +174,25 @@ pub extern "C" fn Java_io_zenoh_jni_JNILivelinessToken_undeclareViaJNI(
     unsafe { Arc::from_raw(token_ptr) };
 }
 
+/// Declares a liveliness subscriber via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `session_ptr`: Raw pointer to the [Session].
+/// - `key_expr_ptr`: Nullable pointer to a declared [KeyExpr].
+/// - `key_expr_str`: String representation of the key expression.
+/// - `callback`: Callback invoked for each received sample.
+/// - `history`: Whether to include historical samples.
+/// - `on_close`: Callback invoked when the subscriber is undeclared.
+/// - `out`: Single-element `long[]`; receives the raw subscriber pointer on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
+///
+/// # Safety
+/// - `session_ptr` and `key_expr_ptr` (if non-null) must be valid and not freed.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessSubscriberViaJNI(
@@ -146,9 +204,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessSubscribe
     callback: JObject,
     history: jboolean,
     on_close: JObject,
-) -> *const Subscriber<()> {
+    out: JLongArray,
+) -> jstring {
     let session = OwnedObject::from_raw(session_ptr);
-    || -> ZResult<*const Subscriber<()>> {
+    || -> ZResult<()> {
         let key_expr = process_kotlin_key_expr(&mut env, &key_expr_str, key_expr_ptr)?;
         tracing::debug!("Declaring liveliness subscriber on '{}'...", key_expr);
 
@@ -161,10 +220,15 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNISession_declareLivelinessSubscribe
             .map_err(|err| zerror!("Unable to declare liveliness subscriber: {}", err))?;
 
         tracing::debug!("Subscriber declared on '{}'.", key_expr);
-        Ok(Arc::into_raw(Arc::new(subscriber)))
+        let ptr = Arc::into_raw(Arc::new(subscriber));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }

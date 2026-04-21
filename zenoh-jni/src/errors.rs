@@ -14,16 +14,7 @@
 
 use std::fmt;
 
-use jni::JNIEnv;
-
-#[macro_export]
-macro_rules! throw_exception {
-    ($env:expr, $err:expr) => {{
-        let _ = $err.throw_on_jvm(&mut $env).map_err(|err| {
-            tracing::error!("Unable to throw exception: {}", err);
-        });
-    }};
-}
+use jni::{sys::jstring, JNIEnv};
 
 #[macro_export]
 macro_rules! zerror {
@@ -46,14 +37,12 @@ impl fmt::Display for ZError {
     }
 }
 
-impl ZError {
-    const KOTLIN_EXCEPTION_NAME: &'static str = "io/zenoh/exceptions/ZError";
-
-    pub fn throw_on_jvm(&self, env: &mut JNIEnv) -> ZResult<()> {
-        let exception_class = env
-            .find_class(Self::KOTLIN_EXCEPTION_NAME)
-            .map_err(|err| zerror!("Failed to retrieve exception class: {}", err))?;
-        env.throw_new(exception_class, self.to_string())
-            .map_err(|err| zerror!("Failed to throw exception: {}", err))
+/// Creates a JNI error string (non-null jstring) from `msg`.
+/// Returns null if the JVM cannot allocate the string (OOM); in that case a
+/// Java `OutOfMemoryError` is already pending and takes priority.
+pub(crate) fn make_error_jstring(env: &mut JNIEnv, msg: &str) -> jstring {
+    match env.new_string(msg) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
     }
 }

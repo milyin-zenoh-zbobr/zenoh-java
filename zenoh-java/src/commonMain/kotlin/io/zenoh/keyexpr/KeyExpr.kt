@@ -79,7 +79,9 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
         @JvmStatic
         @Throws(ZError::class)
         fun tryFrom(keyExpr: String): KeyExpr {
-            return KeyExpr(JNIKeyExpr.tryFrom(keyExpr))
+            val out = arrayOfNulls<String>(1)
+            JNIKeyExpr.tryFrom(keyExpr, out)?.let { throw ZError(it) }
+            return KeyExpr(out[0]!!)
         }
 
         /**
@@ -95,7 +97,9 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
         @JvmStatic
         @Throws(ZError::class)
         fun autocanonize(keyExpr: String): KeyExpr {
-            return KeyExpr(JNIKeyExpr.autocanonize(keyExpr))
+            val out = arrayOfNulls<String>(1)
+            JNIKeyExpr.autocanonize(keyExpr, out)?.let { throw ZError(it) }
+            return KeyExpr(out[0]!!)
         }
     }
 
@@ -106,7 +110,9 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun intersects(other: KeyExpr): Boolean {
-        return JNIKeyExpr.intersects(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr)
+        val out = IntArray(1)
+        JNIKeyExpr.intersects(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr, out)?.let { throw ZError(it) }
+        return out[0] == 1
     }
 
     /**
@@ -116,7 +122,9 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun includes(other: KeyExpr): Boolean {
-        return JNIKeyExpr.includes(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr)
+        val out = IntArray(1)
+        JNIKeyExpr.includes(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr, out)?.let { throw ZError(it) }
+        return out[0] == 1
     }
 
     /**
@@ -126,7 +134,9 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun relationTo(other: KeyExpr): SetIntersectionLevel {
-        return SetIntersectionLevel.fromInt(JNIKeyExpr.relationTo(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr))
+        val out = IntArray(1)
+        JNIKeyExpr.relationTo(jniKeyExpr, keyExpr, other.jniKeyExpr, other.keyExpr, out)?.let { throw ZError(it) }
+        return SetIntersectionLevel.fromInt(out[0])
     }
 
     /**
@@ -135,7 +145,9 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun join(other: String): KeyExpr {
-        return KeyExpr(JNIKeyExpr.join(jniKeyExpr, keyExpr, other))
+        val out = arrayOfNulls<String>(1)
+        JNIKeyExpr.join(jniKeyExpr, keyExpr, other, out)?.let { throw ZError(it) }
+        return KeyExpr(out[0]!!)
     }
 
     /**
@@ -144,7 +156,9 @@ class KeyExpr internal constructor(internal val keyExpr: String, internal var jn
      */
     @Throws(ZError::class)
     fun concat(other: String): KeyExpr {
-        return KeyExpr(JNIKeyExpr.concat(jniKeyExpr, keyExpr, other))
+        val out = arrayOfNulls<String>(1)
+        JNIKeyExpr.concat(jniKeyExpr, keyExpr, other, out)?.let { throw ZError(it) }
+        return KeyExpr(out[0]!!)
     }
 
     override fun toString(): String {

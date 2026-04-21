@@ -15,7 +15,6 @@
 package io.zenoh.jni
 
 import io.zenoh.ZenohLoad
-import io.zenoh.exceptions.ZError
 
 /** Adapter for the native Zenoh config. */
 public class JNIConfig(internal val ptr: Long) {
@@ -26,54 +25,54 @@ public class JNIConfig(internal val ptr: Long) {
             ZenohLoad
         }
 
-        @Throws(ZError::class)
-        fun loadDefault(): JNIConfig = JNIConfig(loadDefaultConfigViaJNI())
+        fun loadDefault(out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadDefaultConfigViaJNI(rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
+        }
 
-        @Throws(ZError::class)
-        fun loadFromFile(path: String): JNIConfig = JNIConfig(loadConfigFileViaJNI(path))
+        fun loadFromFile(path: String, out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadConfigFileViaJNI(path, rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
+        }
 
-        @Throws(ZError::class)
-        fun loadFromJson(rawConfig: String): JNIConfig = JNIConfig(loadJsonConfigViaJNI(rawConfig))
+        fun loadFromJson(rawConfig: String, out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadJsonConfigViaJNI(rawConfig, rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
+        }
 
-        @Throws(ZError::class)
-        fun loadFromYaml(rawConfig: String): JNIConfig = JNIConfig(loadYamlConfigViaJNI(rawConfig))
+        fun loadFromYaml(rawConfig: String, out: Array<JNIConfig?>): String? {
+            val rawOut = LongArray(1)
+            val err = loadYamlConfigViaJNI(rawConfig, rawOut)
+            if (err == null) out[0] = JNIConfig(rawOut[0])
+            return err
+        }
 
-        @Throws(ZError::class)
-        private external fun loadDefaultConfigViaJNI(): Long
+        private external fun loadDefaultConfigViaJNI(out: LongArray): String?
 
-        @Throws(ZError::class)
-        private external fun loadConfigFileViaJNI(path: String): Long
+        private external fun loadConfigFileViaJNI(path: String, out: LongArray): String?
 
-        @Throws(ZError::class)
-        private external fun loadJsonConfigViaJNI(rawConfig: String): Long
+        private external fun loadJsonConfigViaJNI(rawConfig: String, out: LongArray): String?
 
-        @Throws(ZError::class)
-        private external fun loadYamlConfigViaJNI(rawConfig: String): Long
+        private external fun loadYamlConfigViaJNI(rawConfig: String, out: LongArray): String?
 
-        @Throws(ZError::class)
-        private external fun getIdViaJNI(ptr: Long): ByteArray
-
-        @Throws(ZError::class)
-        private external fun insertJson5ViaJNI(ptr: Long, key: String, value: String): Long
+        private external fun insertJson5ViaJNI(ptr: Long, key: String, value: String): String?
 
         private external fun freePtrViaJNI(ptr: Long)
 
-        @Throws(ZError::class)
-        private external fun getJsonViaJNI(ptr: Long, key: String): String
+        private external fun getJsonViaJNI(ptr: Long, key: String, out: Array<String?>): String?
     }
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
-    @Throws(ZError::class)
-    fun getId(): ByteArray = getIdViaJNI(ptr)
+    fun getJson(key: String, out: Array<String?>): String? = getJsonViaJNI(ptr, key, out)
 
-    @Throws(ZError::class)
-    fun getJson(key: String): String = getJsonViaJNI(ptr, key)
-
-    @Throws(ZError::class)
-    fun insertJson5(key: String, value: String) {
-        insertJson5ViaJNI(ptr, key, value)
-    }
+    fun insertJson5(key: String, value: String): String? = insertJson5ViaJNI(ptr, key, value)
 }

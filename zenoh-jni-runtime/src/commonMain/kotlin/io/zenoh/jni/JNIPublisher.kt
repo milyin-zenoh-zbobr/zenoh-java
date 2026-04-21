@@ -14,8 +14,6 @@
 
 package io.zenoh.jni
 
-import io.zenoh.exceptions.ZError
-
 /**
  * Adapter class for a native Zenoh publisher. Uses primitive types for put/delete.
  *
@@ -23,27 +21,20 @@ import io.zenoh.exceptions.ZError
  */
 public class JNIPublisher(private val ptr: Long) {
 
-    @Throws(ZError::class)
-    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?) {
+    fun put(payload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?): String? =
         putViaJNI(ptr, payload, encodingId, encodingSchema, attachment)
-    }
 
-    @Throws(ZError::class)
-    fun delete(attachment: ByteArray?) {
-        deleteViaJNI(ptr, attachment)
-    }
+    fun delete(attachment: ByteArray?): String? = deleteViaJNI(ptr, attachment)
 
     fun close() {
         freePtrViaJNI(ptr)
     }
 
-    @Throws(ZError::class)
     private external fun putViaJNI(
         ptr: Long, valuePayload: ByteArray, encodingId: Int, encodingSchema: String?, attachment: ByteArray?
-    )
+    ): String?
 
-    @Throws(ZError::class)
-    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?)
+    private external fun deleteViaJNI(ptr: Long, attachment: ByteArray?): String?
 
     private external fun freePtrViaJNI(ptr: Long)
 }

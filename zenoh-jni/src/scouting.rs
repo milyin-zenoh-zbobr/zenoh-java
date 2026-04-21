@@ -15,8 +15,8 @@
 use std::{ptr::null, sync::Arc};
 
 use jni::{
-    objects::{GlobalRef, JClass, JList, JObject, JValue},
-    sys::jint,
+    objects::{GlobalRef, JClass, JList, JLongArray, JObject, JValue},
+    sys::{jint, jlong, jstring},
     JNIEnv,
 };
 use zenoh::{config::WhatAmIMatcher, Wait};
@@ -24,17 +24,19 @@ use zenoh::{scouting::Scout, Config};
 
 use crate::owned_object::OwnedObject;
 use crate::utils::{get_callback_global_ref, get_java_vm, load_on_close};
-use crate::{errors::ZResult, throw_exception, zerror};
+use crate::{errors::{make_error_jstring, ZResult}, zerror};
 
 /// Start a scout.
 ///
-/// # Params
+/// # Parameters
 /// - `whatAmI`: Ordinal value of the WhatAmI enum.
 /// - `callback`: Callback to be executed whenever a hello message is received.
 /// - `config_ptr`: Optional config pointer.
+/// - `out`: Single-element `long[]`; receives the raw scout pointer on success.
 ///
-/// Returns a pointer to the scout, which must be freed afterwards.
-/// If starting the scout fails, an exception is thrown on the JVM, and a null pointer is returned.
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
 ///
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -45,8 +47,9 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIScout_00024Companion_scoutViaJNI(
     callback: JObject,
     on_close: JObject,
     config_ptr: /*nullable=*/ *const Config,
-) -> *const Scout<()> {
-    || -> ZResult<*const Scout<()>> {
+    out: JLongArray,
+) -> jstring {
+    || -> ZResult<()> {
         let callback_global_ref = get_callback_global_ref(&mut env, callback)?;
         let java_vm = Arc::new(get_java_vm(&mut env)?);
         let on_close_global_ref: GlobalRef = get_callback_global_ref(&mut env, on_close)?;
@@ -58,7 +61,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIScout_00024Companion_scoutViaJNI(
             let arc_cfg = OwnedObject::from_raw(config_ptr);
             (*arc_cfg).clone()
         };
-        zenoh::scout(whatAmIMatcher, config)
+        let scout = zenoh::scout(whatAmIMatcher, config)
             .callback(move |hello| {
                 on_close.noop(); // Moves `on_close` inside the closure so it gets destroyed with the closure
                 tracing::debug!("Received hello: {hello}");
@@ -91,13 +94,18 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIScout_00024Companion_scoutViaJNI(
                 .map_err(|err| tracing::error!("Error while scouting: ${err}"));
             })
             .wait()
-            .map(|scout| Arc::into_raw(Arc::new(scout)))
-            .map_err(|err| zerror!(err))
+            .map_err(|err| zerror!(err))?;
+        let ptr = Arc::into_raw(Arc::new(scout));
+        env.set_long_array_region(&out, 0, &[ptr as jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 /// Frees the scout.

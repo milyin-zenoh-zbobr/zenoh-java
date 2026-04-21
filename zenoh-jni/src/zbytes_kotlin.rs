@@ -23,16 +23,15 @@
 //! different receiver type — JNI cannot overload on parameter type alone).
 
 use jni::{
-    objects::{JByteArray, JClass, JList, JMap, JObject, JString, JValue},
-    sys::jobject,
+    objects::{JByteArray, JClass, JList, JMap, JObject, JObjectArray, JString, JValue},
+    sys::{jobject, jstring},
     JNIEnv,
 };
 use zenoh::bytes::ZBytes;
 use zenoh_ext::{VarInt, ZDeserializeError, ZDeserializer, ZSerializer};
 
 use crate::{
-    errors::ZResult,
-    throw_exception,
+    errors::{make_error_jstring, ZResult},
     utils::{bytes_to_java_array, decode_byte_array},
     zerror,
 };
@@ -168,6 +167,18 @@ fn decode_ktype(env: &mut JNIEnv, ktype: JObject) -> ZResult<KotlinType> {
     }
 }
 
+/// Serializes a Kotlin object into a ZBytes byte array via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `any`: The Kotlin object to serialize.
+/// - `ktype`: The `KType` describing the object type.
+/// - `out`: Single-element `Object[]`; receives the `byte[]` result on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_serializeViaJNI(
@@ -175,19 +186,21 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_serializeViaJNI(
     _class: JClass,
     any: JObject,
     ktype: JObject,
-) -> jobject {
-    || -> ZResult<jobject> {
+    out: JObjectArray,
+) -> jstring {
+    || -> ZResult<()> {
         let kotlin_type = decode_ktype(&mut env, ktype)?;
         let mut serializer = ZSerializer::new();
         serialize(&mut env, &mut serializer, any, &kotlin_type)?;
         let zbytes = serializer.finish();
         let byte_array = bytes_to_java_array(&env, &zbytes).map_err(|err| zerror!(err))?;
-        Ok(byte_array.as_raw())
+        env.set_object_array_element(&out, 0, &byte_array)
+            .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-        JObject::default().as_raw()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 fn serialize(
@@ -358,6 +371,18 @@ fn serialize(
     Ok(())
 }
 
+/// Deserializes a byte array into a Kotlin object via JNI.
+///
+/// # Parameters
+/// - `env`: The JNI environment.
+/// - `_class`: The JNI class.
+/// - `bytes`: The byte array to deserialize.
+/// - `ktype`: The `KType` describing the target object type.
+/// - `out`: Single-element `Object[]`; receives the deserialized Kotlin object on success.
+///
+/// # Returns
+/// Null on success; a non-null error message string on failure. `out` is left
+/// unchanged on failure.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_deserializeViaJNI(
@@ -365,8 +390,9 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_deserializeViaJNI(
     _class: JClass,
     bytes: JByteArray,
     ktype: JObject,
-) -> jobject {
-    || -> ZResult<jobject> {
+    out: JObjectArray,
+) -> jstring {
+    || -> ZResult<()> {
         let raw = decode_byte_array(&env, bytes)?;
         let zbytes = ZBytes::from(raw);
         let mut deserializer = ZDeserializer::new(&zbytes);
@@ -375,12 +401,14 @@ pub extern "C" fn Java_io_zenoh_jni_JNIZBytesKotlin_deserializeViaJNI(
         if !deserializer.done() {
             return Err(zerror!(ZDeserializeError));
         }
-        Ok(obj)
+        let jobj = unsafe { JObject::from_raw(obj) };
+        env.set_object_array_element(&out, 0, &jobj)
+            .map_err(|err| zerror!(err))
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-        JObject::default().as_raw()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 fn deserialize(

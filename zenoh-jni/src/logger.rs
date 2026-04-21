@@ -14,34 +14,32 @@
 
 use jni::{
     objects::{JClass, JString},
+    sys::jstring,
     JNIEnv,
 };
 
-use crate::{errors::ZResult, throw_exception, zerror};
+use crate::errors::{make_error_jstring, ZResult};
+use crate::zerror;
 
-/// Redirects the Rust logs either to logcat for Android systems or to the standard output (for non-Android systems).
+/// Initializes Rust logging via JNI.
 ///
-/// This function is meant to be called from Java/Kotlin code through JNI. It takes a `filter`
-/// indicating the desired log level.
-/// If the logger was already initialized in a previous call, then it does nothing.
+/// On Android, redirects to logcat. On other platforms, initialises env_logger
+/// writing to standard output.
 ///
-/// See https://docs.rs/env_logger/latest/env_logger/index.html for accepted filter format.
-///
-/// # Parameters:
+/// # Parameters
 /// - `env`: The JNI environment.
 /// - `_class`: The JNI class.
-/// - `filter`: The logs filter.
+/// - `filter`: Log filter string (env_logger format, e.g. `"debug"`, `"zenoh=trace"`).
 ///
-/// # Errors:
-/// - If there is an error parsing the log level string, a `JNIException` is thrown on the JVM.
-///
+/// # Returns
+/// Null on success; a non-null error message string on failure.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn Java_io_zenoh_jni_JNILogger_startLogsViaJNI(
     mut env: JNIEnv,
     _class: JClass,
     filter: JString,
-) {
+) -> jstring {
     || -> ZResult<()> {
         let log_level = parse_filter(&mut env, filter)?;
         android_logd_logger::builder()
@@ -52,7 +50,10 @@ pub extern "C" fn Java_io_zenoh_jni_JNILogger_startLogsViaJNI(
             .ok();
         Ok(())
     }()
-    .unwrap_or_else(|err| throw_exception!(env, err))
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 fn parse_filter(env: &mut JNIEnv, log_level: JString) -> ZResult<String> {

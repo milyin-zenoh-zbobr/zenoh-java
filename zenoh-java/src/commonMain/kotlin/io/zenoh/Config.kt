@@ -45,8 +45,11 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
          * Returns the default config.
          */
         @JvmStatic
+        @Throws(ZError::class)
         fun loadDefault(): Config {
-            return Config(JNIConfig.loadDefault())
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadDefault(out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -59,7 +62,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromFile(file: File): Config {
-            return Config(JNIConfig.loadFromFile(file.toString()))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromFile(file.toString(), out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -72,7 +77,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromFile(path: Path): Config {
-            return Config(JNIConfig.loadFromFile(path.toString()))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromFile(path.toString(), out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -87,7 +94,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromJson(config: String): Config {
-            return Config(JNIConfig.loadFromJson(config))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromJson(config, out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -102,7 +111,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromJson5(config: String): Config {
-            return Config(JNIConfig.loadFromJson(config))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromJson(config, out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -117,7 +128,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
         @JvmStatic
         @Throws(ZError::class)
         fun fromYaml(config: String): Config {
-            return Config(JNIConfig.loadFromYaml(config))
+            val out = arrayOfNulls<JNIConfig>(1)
+            JNIConfig.loadFromYaml(config, out)?.let { throw ZError(it) }
+            return Config(out[0]!!)
         }
 
         /**
@@ -142,7 +155,9 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
      */
     @Throws(ZError::class)
     fun getJson(key: String): String {
-        return jniConfig.getJson(key)
+        val out = arrayOfNulls<String>(1)
+        jniConfig.getJson(key, out)?.let { throw ZError(it) }
+        return out[0]!!
     }
 
     /**
@@ -150,7 +165,7 @@ class Config internal constructor(internal val jniConfig: JNIConfig) {
      */
     @Throws(ZError::class)
     fun insertJson5(key: String, value: String) {
-        jniConfig.insertJson5(key, value)
+        jniConfig.insertJson5(key, value)?.let { throw ZError(it) }
     }
 
     protected fun finalize() {

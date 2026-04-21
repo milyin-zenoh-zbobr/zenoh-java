@@ -15,26 +15,23 @@
 use std::sync::Arc;
 
 use jni::sys::jboolean;
-use jni::{objects::JClass, JNIEnv};
+use jni::{
+    objects::{JClass, JLongArray, JObject, JValue},
+    sys::jstring,
+    JNIEnv,
+};
 use zenoh::handlers::{Callback, DefaultHandler};
 use zenoh::pubsub::Subscriber;
 use zenoh_ext::SampleMissListener;
 use zenoh_ext::{AdvancedSubscriber, Miss, SampleMissListenerBuilder};
 
 use crate::sample_callback::SetJniSampleCallback;
-use jni::objects::JObject;
 
-use crate::errors::ZResult;
-use jni::objects::JValue;
-use zenoh::Wait;
-
+use crate::errors::{make_error_jstring, ZResult};
 use crate::owned_object::OwnedObject;
-
 use crate::utils::{get_callback_global_ref, get_java_vm, load_on_close};
 use crate::zerror;
-use std::ptr::null;
-
-use crate::throw_exception;
+use zenoh::Wait;
 
 trait SetJniSampleMissListenerCallback {
     type WithCallback;
@@ -107,9 +104,10 @@ impl<'a> SetJniSampleMissListenerCallback for SampleMissListenerBuilder<'a, Defa
 /// - `advanced_subscriber_ptr`: The raw pointer to the [AdvancedSubscriber].
 /// - `callback`: The callback function as an instance of the `JNISubscriberCallback` interface in Java/Kotlin.
 /// - `on_close`: A Java/Kotlin `JNIOnCloseCallback` function interface to be called upon closing the subscriber.
+/// - `out`: Single-element `long[]`; receives the raw subscriber pointer on success.
 ///
 /// Returns:
-/// - A raw pointer to the declared [Subscriber]. In case of failure, an exception is thrown and null is returned.
+/// - Null on success; a non-null error message string on failure. `out` is left unchanged on failure.
 ///
 /// Safety:
 /// - The function is marked as unsafe due to raw pointer manipulation and JNI interaction.
@@ -118,7 +116,6 @@ impl<'a> SetJniSampleMissListenerCallback for SampleMissListenerBuilder<'a, Defa
 ///   allowing safe usage of the [AdvancedSubscriber] after this function call.
 /// - The callback function passed as `callback` must be a valid instance of the `JNISubscriberCallback` interface
 ///   in Java/Kotlin, matching the specified signature.
-/// - The function may throw a JNI exception in case of failure, which should be handled by the caller.
 ///
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
@@ -130,10 +127,11 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareDetectPu
     history: jboolean,
     callback: JObject,
     on_close: JObject,
-) -> *const Subscriber<()> {
+    out: JLongArray,
+) -> jstring {
     let advanced_subscriber = OwnedObject::from_raw(advanced_subscriber_ptr);
 
-    || -> ZResult<*const Subscriber<()>> {
+    || -> ZResult<()> {
         tracing::debug!(
             "Declaring detect publishers subscriber on '{}'...",
             advanced_subscriber.key_expr()
@@ -150,12 +148,17 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareDetectPu
             "Detect publishers subscriber declared on '{}'...",
             advanced_subscriber.key_expr()
         );
-        Ok(Arc::into_raw(Arc::new(detect_publishers_subscriber)))
+        let ptr = Arc::into_raw(Arc::new(detect_publishers_subscriber));
+        env.set_long_array_region(&out, 0, &[ptr as jni::sys::jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 /// Declares a background subscriber to detect matching publishers for an [AdvancedSubscriber] via JNI.
@@ -167,6 +170,8 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareDetectPu
 /// - `callback`: The callback function as an instance of the `JNISubscriberCallback` interface in Java/Kotlin.
 /// - `on_close`: A Java/Kotlin `JNIOnCloseCallback` function interface to be called upon closing the subscriber.
 ///
+/// Returns null on success; a non-null error message string on failure.
+///
 /// Safety:
 /// - The function is marked as unsafe due to raw pointer manipulation and JNI interaction.
 /// - It assumes that the provided [AdvancedSubscriber] pointer is valid and has not been modified or freed.
@@ -174,7 +179,6 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareDetectPu
 ///   allowing safe usage of the [AdvancedSubscriber] after this function call.
 /// - The callback function passed as `callback` must be a valid instance of the `JNISubscriberCallback` interface
 ///   in Java/Kotlin, matching the specified signature.
-/// - The function may throw a JNI exception in case of failure, which should be handled by the caller.
 ///
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
@@ -186,7 +190,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareBackgrou
     history: jboolean,
     callback: JObject,
     on_close: JObject,
-) {
+) -> jstring {
     let advanced_subscriber = OwnedObject::from_raw(advanced_subscriber_ptr);
 
     || -> ZResult<()> {
@@ -214,9 +218,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareBackgrou
         );
         Ok(())
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-    });
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 /// Declares a [SampleMissListener] to detect missed samples for an [AdvancedSubscriber] via JNI.
@@ -227,9 +232,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareBackgrou
 /// - `advanced_subscriber_ptr`: The raw pointer to the [AdvancedSubscriber].
 /// - `callback`: The callback function as an instance of the `JNISampleMissListenerCallback` interface in Java/Kotlin.
 /// - `on_close`: A Java/Kotlin `JNIOnCloseCallback` function interface to be called upon closing the subscriber.
+/// - `out`: Single-element `long[]`; receives the raw sample miss listener pointer on success.
 ///
 /// Returns:
-/// - A raw pointer to the declared [SampleMissListener]. In case of failure, an exception is thrown and null is returned.
+/// - Null on success; a non-null error message string on failure. `out` is left unchanged on failure.
 ///
 /// Safety:
 /// - The function is marked as unsafe due to raw pointer manipulation and JNI interaction.
@@ -238,7 +244,6 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareBackgrou
 ///   allowing safe usage of the [AdvancedSubscriber] after this function call.
 /// - The callback function passed as `callback` must be a valid instance of the `JNISampleMissListenerCallback` interface
 ///   in Java/Kotlin, matching the specified signature.
-/// - The function may throw a JNI exception in case of failure, which should be handled by the caller.
 ///
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
@@ -250,10 +255,11 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareSampleMi
 
     callback: JObject,
     on_close: JObject,
-) -> *const SampleMissListener<()> {
+    out: JLongArray,
+) -> jstring {
     let advanced_subscriber = OwnedObject::from_raw(advanced_subscriber_ptr);
 
-    || -> ZResult<*const SampleMissListener<()>> {
+    || -> ZResult<()> {
         tracing::debug!(
             "Declaring sample miss listener on '{}'...",
             advanced_subscriber.key_expr()
@@ -271,12 +277,17 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareSampleMi
             "Matching listener declared on '{}'...",
             advanced_subscriber.key_expr()
         );
-        Ok(Arc::into_raw(Arc::new(sample_miss_listener)))
+        let ptr = Arc::into_raw(Arc::new(sample_miss_listener));
+        env.set_long_array_region(&out, 0, &[ptr as jni::sys::jlong])
+            .map_err(|e| {
+                unsafe { Arc::from_raw(ptr) };
+                zerror!(e)
+            })
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-        null()
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 /// Declare a background sample miss listener for [AdvancedSubscriber] via JNI.
@@ -289,6 +300,8 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareSampleMi
 /// - `callback`: The callback function as an instance of the `JNISampleMissListenerCallback` interface in Java/Kotlin.
 /// - `on_close`: A Java/Kotlin `JNIOnCloseCallback` function interface to be called upon undeclaring the [AdvancedSubscriber].
 ///
+/// Returns null on success; a non-null error message string on failure.
+///
 /// Safety:
 /// - The function is marked as unsafe due to raw pointer manipulation and JNI interaction.
 /// - It assumes that the provided [AdvancedSubscriber] pointer is valid and has not been modified or freed.
@@ -296,7 +309,6 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareSampleMi
 ///   allowing safe usage of the [AdvancedSubscriber] after this function call.
 /// - The callback function passed as `callback` must be a valid instance of the `JNISampleMissListenerCallback` interface
 ///   in Java/Kotlin, matching the specified signature.
-/// - The function may throw a JNI exception in case of failure, which should be handled by the caller.
 ///
 #[cfg(feature = "zenoh-ext")]
 #[no_mangle]
@@ -308,7 +320,7 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareBackgrou
 
     callback: JObject,
     on_close: JObject,
-) {
+) -> jstring {
     let advanced_subscriber = OwnedObject::from_raw(advanced_subscriber_ptr);
 
     || -> ZResult<()> {
@@ -330,9 +342,10 @@ pub unsafe extern "C" fn Java_io_zenoh_jni_JNIAdvancedSubscriber_declareBackgrou
         );
         Ok(())
     }()
-    .unwrap_or_else(|err| {
-        throw_exception!(env, err);
-    })
+    .map_or_else(
+        |err| make_error_jstring(&mut env, &err.to_string()),
+        |_| std::ptr::null_mut(),
+    )
 }
 
 /// Frees the [AdvancedSubscriber].
