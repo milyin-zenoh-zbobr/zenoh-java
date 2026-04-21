@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use jni::sys::jboolean;
 use jni::{
-    objects::{JClass, JLongArray, JObject},
+    objects::{JClass, JLongArray, JObject, JValue},
     sys::jstring,
     JNIEnv,
 };
@@ -31,7 +31,6 @@ use crate::errors::{make_error_jstring, ZResult};
 use crate::owned_object::OwnedObject;
 use crate::utils::{get_callback_global_ref, get_java_vm, load_on_close};
 use crate::zerror;
-use jni::objects::{JObject, JValue};
 use zenoh::Wait;
 
 trait SetJniSampleMissListenerCallback {
